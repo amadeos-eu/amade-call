@@ -220,6 +220,7 @@ public final class Call {
         listener.state(this, State.RINGING);
     }
 
+    // --8<-- [start:accept]
     /** Answers; {@code withCamera} false answers a video call with sound only (the camera can be switched on later). */
     public void accept(boolean withCamera) {
         synchronized (this) {
@@ -241,6 +242,7 @@ public final class Call {
         channel.send(Signal.decline(myName, false));
         end(EndReason.DECLINED, false);
     }
+    // --8<-- [end:accept]
 
     /** Tells a caller that this computer is in another call. */
     public static void busy(SignalChannel channel, String myName) {

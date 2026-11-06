@@ -53,6 +53,7 @@ public class AvahiDiscovery implements Discovery {
         }
     }
 
+    // --8<-- [start:publish]
     private void publish(String name, Listener listener) {
         String shown = shorten(name);
         // The service name only has to be unique in the network; the name people see travels in the TXT record.
@@ -75,6 +76,7 @@ public class AvahiDiscovery implements Discovery {
             listener.unavailable("avahi-publish");
         }
     }
+    // --8<-- [end:publish]
 
     static String shorten(String name) {
         String n = name == null ? "" : name.strip().replaceAll("[\\p{Cntrl}\"]", "");

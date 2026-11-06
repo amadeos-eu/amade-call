@@ -89,6 +89,7 @@ public class SignalChannel implements AutoCloseable {
         });
     }
 
+    // --8<-- [start:frame]
     private Optional<String> frame() throws IOException {
         int length;
         try {
@@ -119,6 +120,7 @@ public class SignalChannel implements AutoCloseable {
             return false;
         }
     }
+    // --8<-- [end:frame]
 
     public boolean isClosed() {
         return closed;

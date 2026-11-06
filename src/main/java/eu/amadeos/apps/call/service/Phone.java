@@ -72,6 +72,7 @@ public class Phone implements AutoCloseable {
         LOG.info("Waiting for calls on port {} as {}", server.port(), self.shortText());
     }
 
+    // --8<-- [start:answer]
     private void answer(SignalChannel channel, Supplier<MediaSettings> settings, Listener listener) {
         Optional<Signal> hello;
         try {
@@ -98,6 +99,7 @@ public class Phone implements AutoCloseable {
         }
         listener.incoming(call);
     }
+    // --8<-- [end:answer]
 
     /** Calls someone; empty while another call runs. */
     public synchronized Optional<Call> call(Endpoint endpoint, Optional<PeerKey> expected, String peerName, CallKind kind,

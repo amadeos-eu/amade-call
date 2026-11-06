@@ -34,12 +34,14 @@ public final class Tls {
         return context;
     }
 
+    // --8<-- [start:peer-key]
     /** The key the other side proved to own in the handshake. */
     public static PeerKey peerKey(SSLSession session) throws SSLPeerUnverifiedException {
         Certificate[] chain = session.getPeerCertificates();
         if (chain.length == 0) throw new SSLPeerUnverifiedException("no certificate");
         return PeerKey.of(chain[0].getPublicKey());
     }
+    // --8<-- [end:peer-key]
 
     /**
      * Accepts any certificate that is well-formed and signed by its own key: who the other side is gets decided
@@ -56,6 +58,7 @@ public final class Tls {
             check(chain);
         }
 
+        // --8<-- [start:any-key]
         private static void check(X509Certificate[] chain) throws CertificateException {
             if (chain == null || chain.length == 0) throw new CertificateException("no certificate");
             try {
@@ -64,6 +67,7 @@ public final class Tls {
                 throw new CertificateException("certificate not signed by its own key", e);
             }
         }
+        // --8<-- [end:any-key]
 
         @Override
         public X509Certificate[] getAcceptedIssuers() {

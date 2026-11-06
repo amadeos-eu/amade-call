@@ -23,6 +23,7 @@ public record SafetyCode(List<String> groups) {
         if (groups.size() != GROUPS) throw new IllegalArgumentException("six groups expected");
     }
 
+    // --8<-- [start:code]
     public static SafetyCode of(PeerKey a, PeerKey b) {
         PeerKey first = a.compareTo(b) <= 0 ? a : b;
         PeerKey second = first == a ? b : a;
@@ -37,6 +38,7 @@ public record SafetyCode(List<String> groups) {
         String digits = String.format("%015d", new BigInteger(1, bytes).mod(HALF));
         return List.of(digits.substring(0, 5), digits.substring(5, 10), digits.substring(10, 15));
     }
+    // --8<-- [end:code]
 
     @Override
     public String toString() {

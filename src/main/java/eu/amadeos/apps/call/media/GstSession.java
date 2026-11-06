@@ -141,6 +141,7 @@ final class GstSession implements MediaSession {
         webrtc.connect((Element.PAD_ADDED) this::onRemotePad);
     }
 
+    // --8<-- [start:pipeline]
     /** The pipeline as gst-launch text. */
     String description() {
         StringBuilder d = new StringBuilder("webrtcbin name=webrtc bundle-policy=max-bundle latency=150\n");
@@ -168,6 +169,7 @@ final class GstSession implements MediaSession {
         d.append(" ! audioconvert ! ").append(speaker()).append('\n');
         return d.toString();
     }
+    // --8<-- [end:pipeline]
 
     private String cameraSource() {
         if (settings.sources() != Sources.DEVICES) {
@@ -250,6 +252,7 @@ final class GstSession implements MediaSession {
         }
     }
 
+    // --8<-- [start:describe]
     /**
      * Asks webrtcbin for the offer or the answer. Like {@code WebRTCBin.createOffer}, but the promise is kept
      * until GStreamer answers: gst1-java-core keeps no reference to it, so the garbage collector could take its
@@ -268,6 +271,7 @@ final class GstSession implements MediaSession {
         pending.add(promise);
         webrtc.emit("create-" + kind, null, promise);
     }
+    // --8<-- [end:describe]
 
     @Override
     public synchronized void iceCandidate(int index, String candidate) {
@@ -386,6 +390,7 @@ final class GstSession implements MediaSession {
         return FlowReturn.OK;
     }
 
+    // --8<-- [start:image]
     /** BGRx bytes as an RGB image: read as little-endian ints they are 0xXXRRGGBB. */
     static BufferedImage image(ByteBuffer bytes, int width, int height) {
         BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
@@ -393,6 +398,7 @@ final class GstSession implements MediaSession {
         bytes.order(ByteOrder.LITTLE_ENDIAN).asIntBuffer().get(pixels, 0, Math.min(pixels.length, bytes.remaining() / 4));
         return image;
     }
+    // --8<-- [end:image]
 
     private void onError(GstObject source, int code, String message) {
         String name = source.getName();
