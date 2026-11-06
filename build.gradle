@@ -1,0 +1,180 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+
+group = 'eu.amadeos'
+// CI computes the version from the Conventional Commits since the last release tag and passes it as
+// -PappVersion (amadeos-eu/amadeos-ci scripts/next-version.sh); a build without it is a local development build.
+version = findProperty('appVersion') ?: '0.0.0-dev.0'
+// Debian sorts 1.1.0~dev.57 before 1.1.0 (with - it would sort after it).
+def debVersion = version.toString().replace('-', '~')
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
+application {
+    mainClass = 'eu.amadeos.apps.call.bootstrap.AmadeCallApplication'
+}
+
+repositories {
+    mavenCentral()
+    maven { url 'https://jitpack.io' }
+}
+
+dependencies {
+    // Theme, Motif look, start-up, XDG folders and the program runner shared by all amadeOS applications.
+    // With ../amade-commons checked out, settings.gradle builds that checkout instead (composite build).
+    implementation 'com.github.amadeos-eu:amade-commons:ae4b76b1a7'
+    // GStreamer from Java (JNA): webrtcbin does the calls (ICE, DTLS-SRTP, RTP), the rest of GStreamer the
+    // camera, the screen, the microphone, the codecs and the speakers. LGPL-3.0, used as a library.
+    implementation 'org.freedesktop.gstreamer:gst1-java-core:1.4.0'
+    runtimeOnly 'ch.qos.logback:logback-classic:1.5.18'
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+application {
+    // JNA loads GStreamer; without this Java 25 warns at every start.
+    applicationDefaultJvmArgs = ['--enable-native-access=ALL-UNNAMED']
+}
+
+test {
+    useJUnitPlatform()
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+    // Tests compare English texts, whatever the language of the build machine.
+    systemProperty 'user.language', 'en'
+    systemProperty 'user.country', 'US'
+}
+
+jar {
+    archiveBaseName = 'amade-call'
+    manifest {
+        attributes(
+            'Main-Class': 'eu.amadeos.apps.call.bootstrap.AmadeCallApplication',
+            'Implementation-Title': 'amade-call',
+            'Implementation-Version': project.version
+        )
+    }
+    from({
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    })
+    // Signed dependency jars would otherwise invalidate the fat jar.
+    exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+// The pictures in docs/screenshots: two programs in one JVM call each other with drawn portraits as camera.
+// Needs a display: xvfb-run -a ./gradlew screenshots
+tasks.register('screenshots', JavaExec) {
+    group = 'documentation'
+    description = 'Makes the screenshots in docs/screenshots'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'eu.amadeos.apps.call.ui.main.Screenshots'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+    systemProperty 'user.language', 'en'
+    systemProperty 'user.country', 'US'
+    args file('docs/screenshots').absolutePath
+}
+
+tasks.register('deb') {
+    dependsOn jar
+    description = 'Builds a standard Debian (.deb) package for amade-call'
+    group = 'distribution'
+
+    doLast {
+        def buildDirFile = layout.buildDirectory.get().asFile
+        def stagingDir = new File(buildDirFile, 'deb-staging')
+        delete(stagingDir)
+
+        def optDir = new File(stagingDir, 'opt/amade-call')
+        def binDir = new File(stagingDir, 'usr/bin')
+        def appDir = new File(stagingDir, 'usr/share/applications')
+        def iconDir = new File(stagingDir, 'usr/share/icons/hicolor/48x48/apps')
+        def docDir = new File(stagingDir, 'usr/share/doc/amade-call')
+        def debianDir = new File(stagingDir, 'DEBIAN')
+        def distDir = new File(buildDirFile, 'distributions')
+        [optDir, binDir, appDir, iconDir, docDir, debianDir, distDir]*.mkdirs()
+
+        copy {
+            from jar.archiveFile
+            into optDir
+            rename { 'amade-call.jar' }
+        }
+
+        def launcher = new File(binDir, 'amade-call')
+        launcher.text = """#!/bin/sh
+exec /usr/bin/java --enable-native-access=ALL-UNNAMED -jar /opt/amade-call/amade-call.jar "\$@"
+"""
+        launcher.setExecutable(true, false)
+
+        copy {
+            from 'packaging/amade-call.desktop'
+            into appDir
+        }
+        // AppStream metadata: name, description and screenshot for amadeOS Software (and a repository's
+        // appstream-generator).
+        copy {
+            from 'packaging/eu.amadeos.apps.call.metainfo.xml'
+            into new File(stagingDir, "usr/share/metainfo")
+        }
+        copy {
+            from 'src/main/resources/icons/amade-call.png'
+            into iconDir
+        }
+        copy {
+            from 'LICENSE'
+            into docDir
+            rename { 'copyright' }
+        }
+
+        new File(debianDir, 'control').text = """Package: amade-call
+Version: ${debVersion}
+Section: net
+Priority: optional
+Architecture: all
+Depends: openjdk-25-jre | java-runtime (>= 25), gstreamer1.0-plugins-base, gstreamer1.0-plugins-good, gstreamer1.0-plugins-bad, gstreamer1.0-nice, gstreamer1.0-pulseaudio, avahi-utils
+Recommends: avahi-daemon, pulseaudio-utils
+Maintainer: amadeOS Project <developers@datazuul.com>
+Description: Video and audio calls for amadeOS
+ Calls other amadeOS computers in the same network with picture and sound,
+ or with sound only. Computers find each other on their own (Avahi); an
+ address can also be typed in. Picture and sound go straight from computer
+ to computer, end-to-end encrypted (WebRTC with DTLS-SRTP); a safety code
+ shows that nobody sits in between. Share the screen and chat during a
+ call. Part of the amadeOS desktop.
+"""
+
+        def debFile = new File(distDir, "amade-call_${debVersion}_all.deb")
+        def process = new ProcessBuilder('dpkg-deb', '--root-owner-group', '--build',
+                stagingDir.absolutePath, debFile.absolutePath)
+                .redirectErrorStream(true)
+                .start()
+        process.inputStream.eachLine { println it }
+        if (process.waitFor() != 0) {
+            throw new GradleException('dpkg-deb failed')
+        }
+        println "[deb] Created ${debFile.absolutePath}"
+    }
+}
+
+tasks.register('installToAmadeOs') {
+    dependsOn 'deb'
+    description = 'Builds and drops the .deb package into ../amadeos/config/packages.chroot/'
+    group = 'distribution'
+
+    doLast {
+        def targetDir = file('../amadeos/config/packages.chroot')
+        targetDir.mkdirs()
+        def debFile = new File(layout.buildDirectory.get().asFile, "distributions/amade-call_${debVersion}_all.deb")
+        copy {
+            from debFile
+            into targetDir
+        }
+        println "[installToAmadeOs] Copied ${debFile.name} to ${targetDir.absolutePath}"
+    }
+}

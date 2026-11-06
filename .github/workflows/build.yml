@@ -1,0 +1,114 @@
+name: Build
+
+# develop builds X.Y.Z-dev.N, release X.Y.Z-pre.N and main the release X.Y.Z, which the release job
+# tags and publishes with the package (see CONTRIBUTING.md of amadeos-eu/amadeos, "Commits and versions").
+on:
+  push:
+    branches: [develop, release, main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      channel: ${{ steps.version.outputs.channel }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The version is computed from the history since the last release tag.
+          fetch-depth: 0
+      - id: version
+        uses: amadeos-eu/amadeos-ci/version@main
+        with:
+          metainfo: packaging/eu.amadeos.apps.call.metainfo.xml
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          # Plain actions/cache instead of the proprietary enhanced cache that is the v6 default.
+          cache-provider: basic
+      # One test makes a real call between two programs over localhost: webrtcbin, libnice, VP8 and Opus
+      # with GStreamer's test picture and test tone.
+      - name: Install GStreamer
+        run: >
+          sudo apt-get update -q && sudo apt-get install -y -q gstreamer1.0-plugins-base gstreamer1.0-plugins-good
+          gstreamer1.0-plugins-bad gstreamer1.0-nice
+      # The Swing integration tests skip themselves without a display, so run under Xvfb.
+      - name: Test
+        run: xvfb-run --auto-servernum ./gradlew test --no-daemon
+      - name: Check that the tests ran
+        run: |
+          count=$(grep -ho 'tests="[0-9]*"' build/test-results/test/*.xml | grep -o '[0-9]*' | paste -sd+ | bc)
+          skipped=$(grep -ho 'skipped="[0-9]*"' build/test-results/test/*.xml | grep -o '[0-9]*' | paste -sd+ | bc)
+          echo "Tests run: $count, skipped: $skipped"
+          test "$count" -ge 56
+          test "$skipped" -eq 0
+      - name: Package
+        run: ./gradlew jar deb --no-daemon -PappVersion=${{ steps.version.outputs.version }}
+      - name: Check the fat jar and the package
+        run: |
+          jar=$(ls build/libs/amade-call-*.jar)
+          unzip -l "$jar" icons/amade-call.png
+          unzip -p "$jar" META-INF/MANIFEST.MF | grep -q 'Main-Class: eu.amadeos.apps.call'
+          unzip -l "$jar" org/freedesktop/gstreamer/Gst.class
+          unzip -l "$jar" eu/amadeos/apps/call/messages_de.properties
+          deb=$(ls build/distributions/amade-call_*_all.deb)
+          dpkg-deb --info "$deb"
+          dpkg-deb --contents "$deb" > contents.txt
+          for f in opt/amade-call/amade-call.jar usr/bin/amade-call \
+                   usr/share/applications/amade-call.desktop \
+                   usr/share/icons/hicolor/48x48/apps/amade-call.png \
+                   usr/share/metainfo/eu.amadeos.apps.call.metainfo.xml usr/share/doc/amade-call/copyright; do
+            grep -q "$f" contents.txt || { echo "missing in the package: $f"; exit 1; }
+          done
+      - name: Upload the Debian package
+        uses: actions/upload-artifact@v7
+        with:
+          name: amade-call-deb
+          path: build/distributions/*.deb
+          if-no-files-found: error
+      - name: Check the package version
+        run: |
+          deb=$(ls build/distributions/amade-call_*_all.deb)
+          test "$(dpkg-deb --field "$deb" Version)" = "${{ steps.version.outputs.deb-version }}"
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-reports
+          path: build/reports/tests/test
+
+  # Only on main, after the release branch was promoted: tag vX.Y.Z and publish the GitHub Release.
+  release:
+    needs: test
+    if: needs.test.outputs.channel == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v8
+        with:
+          name: amade-call-deb
+          path: dist
+      - uses: amadeos-eu/amadeos-ci/release@main
+        with:
+          version: ${{ needs.test.outputs.version }}
+          files: dist/*.deb
+
+  commits:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: amadeos-eu/amadeos-ci/check-commits@main

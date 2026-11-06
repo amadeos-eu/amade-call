@@ -1,0 +1,24 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=amadeOS Calls
+Name[de]=amadeOS Anrufe
+Name[fr]=amadeOS Appels
+Name[es]=amadeOS Llamadas
+Name[it]=amadeOS Chiamate
+GenericName=Video Calls
+GenericName[de]=Videoanrufe
+GenericName[fr]=Appels vidéo
+GenericName[es]=Videollamadas
+GenericName[it]=Videochiamate
+Comment=Video and audio calls to other amadeOS computers
+Comment[de]=Video- und Sprachanrufe zu anderen amadeOS-Computern
+Comment[fr]=Appels vidéo et audio vers d'autres ordinateurs amadeOS
+Comment[es]=Videollamadas y llamadas de voz a otros ordenadores amadeOS
+Comment[it]=Videochiamate e chiamate vocali verso altri computer amadeOS
+Icon=amade-call
+Exec=/usr/bin/amade-call
+Terminal=false
+Categories=Network;Telephony;VideoConference;
+Keywords=call;video call;phone;chat;screen sharing;webcam;Anruf;Videoanruf;Telefon;Bildschirm teilen;
+StartupNotify=true
