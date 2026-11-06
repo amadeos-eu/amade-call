@@ -10,6 +10,7 @@ import org.freedesktop.gstreamer.GstObject;
 import org.freedesktop.gstreamer.Pad;
 import org.freedesktop.gstreamer.PadDirection;
 import org.freedesktop.gstreamer.Pipeline;
+import org.freedesktop.gstreamer.Promise;
 import org.freedesktop.gstreamer.SDPMessage;
 import org.freedesktop.gstreamer.Sample;
 import org.freedesktop.gstreamer.State;
@@ -27,10 +28,15 @@ import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferInt;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.file.Path;
 import java.util.Locale;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 /**
@@ -71,9 +77,14 @@ final class GstSession implements MediaSession {
     private boolean echoCancellation;
     private volatile boolean connected;
     private volatile boolean closed;
+    /** The promises of {@link #describe} until GStreamer fulfils them. */
+    private final Set<Promise> pending = ConcurrentHashMap.newKeySet();
     private long startedAt;
 
-    GstSession(MediaSettings settings, MediaEvents events) {
+    private final Optional<Path> testPicture;
+
+    GstSession(MediaSettings settings, MediaEvents events, Optional<Path> testPicture) {
+        this.testPicture = testPicture;
         this.settings = settings;
         this.events = events;
         this.cameraOn = settings.cameraOn();
@@ -122,7 +133,7 @@ final class GstSession implements MediaSession {
                 LOG.debug("GStreamer warning from {}: {}", source.getName(), message));
         webrtc.connect((WebRTCBin.ON_ICE_CANDIDATE) events::iceCandidate);
         if (settings.offerer()) {
-            webrtc.connect((WebRTCBin.ON_NEGOTIATION_NEEDED) element -> webrtc.createOffer(offer -> {
+            webrtc.connect((WebRTCBin.ON_NEGOTIATION_NEEDED) element -> describe("offer", offer -> {
                 webrtc.setLocalDescription(offer);
                 events.localDescription("offer", offer.getSDPMessage().toString());
             }));
@@ -159,7 +170,11 @@ final class GstSession implements MediaSession {
     }
 
     private String cameraSource() {
-        if (settings.sources() != Sources.DEVICES) return "videotestsrc is-live=true pattern=ball name=cam";
+        if (settings.sources() != Sources.DEVICES) {
+            return testPicture.map(p -> "filesrc name=cam location=" + quote(p.toString())
+                    + " ! decodebin ! videoconvert ! imagefreeze is-live=true")
+                    .orElse("videotestsrc is-live=true pattern=ball name=cam");
+        }
         String device = settings.camera().map(c -> " device=" + quote(c)).orElse("");
         // Most webcams give 720p at 30 frames only as MJPEG; raw pictures are the fallback.
         return "v4l2src name=cam" + device + " ! image/jpeg,width=[320,1280],height=[240,720],framerate=[15/1,30/1]"
@@ -224,7 +239,7 @@ final class GstSession implements MediaSession {
             webrtc.setRemoteDescription(new WebRTCSessionDescription(offer ? WebRTCSDPType.OFFER : WebRTCSDPType.ANSWER,
                     message));
             if (offer) {
-                webrtc.createAnswer(answer -> {
+                describe("answer", answer -> {
                     synchronized (this) {
                         if (closed) return;
                         webrtc.setLocalDescription(answer);
@@ -233,6 +248,25 @@ final class GstSession implements MediaSession {
                 });
             }
         }
+    }
+
+    /**
+     * Asks webrtcbin for the offer or the answer. Like {@code WebRTCBin.createOffer}, but the promise is kept
+     * until GStreamer answers: gst1-java-core keeps no reference to it, so the garbage collector could take its
+     * callback away while GStreamer still works on the description, and the offer would never come (seen with
+     * the first call of a program, when GStreamer loads its plugins first).
+     */
+    private void describe(String kind, Consumer<WebRTCSessionDescription> done) {
+        AtomicReference<Promise> held = new AtomicReference<>();
+        Promise promise = new Promise(p -> {
+            pending.remove(held.get());
+            WebRTCSessionDescription description = (WebRTCSessionDescription) p.getReply().getValue(kind);
+            p.dispose();
+            done.accept(description);
+        });
+        held.set(promise);
+        pending.add(promise);
+        webrtc.emit("create-" + kind, null, promise);
     }
 
     @Override

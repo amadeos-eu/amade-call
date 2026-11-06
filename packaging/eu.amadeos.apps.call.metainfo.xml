@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metadata of amade-call, installed as /usr/share/metainfo/eu.amadeos.apps.call.metainfo.xml.
+     amadeOS Software shows it for the installed package; a repository's appstream-generator reads it too. -->
+<component type="desktop-application">
+  <id>eu.amadeos.apps.call</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>EUPL-1.2</project_license>
+
+  <name>amadeOS Calls</name>
+  <name xml:lang="de">amadeOS Anrufe</name>
+  <name xml:lang="fr">amadeOS Appels</name>
+  <name xml:lang="es">amadeOS Llamadas</name>
+  <name xml:lang="it">amadeOS Chiamate</name>
+
+  <summary>Video and audio calls to other amadeOS computers</summary>
+  <summary xml:lang="de">Video- und Sprachanrufe zu anderen amadeOS-Computern</summary>
+  <summary xml:lang="fr">Appels vidéo et audio vers d'autres ordinateurs amadeOS</summary>
+  <summary xml:lang="es">Videollamadas y llamadas de voz a otros ordenadores amadeOS</summary>
+  <summary xml:lang="it">Videochiamate e chiamate vocali verso altri computer amadeOS</summary>
+
+  <description>
+    <p>amade-call calls other amadeOS computers with picture and sound, or with sound only. Computers in the same network find each other on their own; any other computer can be called by its address. Picture and sound go straight from computer to computer, without a server in between, and are end-to-end encrypted.</p>
+    <p xml:lang="de">amade-call ruft andere amadeOS-Computer mit Bild und Ton oder nur mit Ton an. Computer im selben Netzwerk finden sich von selbst; jeder andere Computer lässt sich über seine Adresse anrufen. Bild und Ton gehen direkt von Computer zu Computer, ohne Server dazwischen, und sind Ende-zu-Ende-verschlüsselt.</p>
+    <p xml:lang="fr">amade-call appelle d'autres ordinateurs amadeOS avec l'image et le son, ou avec le son seulement. Les ordinateurs du même réseau se trouvent d'eux-mêmes ; tout autre ordinateur peut être appelé par son adresse. L'image et le son vont directement d'ordinateur à ordinateur, sans serveur entre eux, et sont chiffrés de bout en bout.</p>
+    <p xml:lang="es">amade-call llama a otros ordenadores amadeOS con imagen y sonido, o solo con sonido. Los ordenadores de la misma red se encuentran solos; cualquier otro ordenador se puede llamar por su dirección. La imagen y el sonido van directamente de ordenador a ordenador, sin servidor en medio, y están cifrados de extremo a extremo.</p>
+    <p xml:lang="it">amade-call chiama altri computer amadeOS con immagine e suono, o solo con il suono. I computer della stessa rete si trovano da soli; qualsiasi altro computer si può chiamare con il suo indirizzo. Immagine e suono vanno direttamente da computer a computer, senza server in mezzo, e sono cifrati end-to-end.</p>
+    <ul>
+      <li>Video calls with camera, microphone and speakers of your choice, or calls with sound only</li>
+      <li xml:lang="de">Videoanrufe mit frei wählbarer Kamera, Mikrofon und Lautsprechern, oder Anrufe nur mit Ton</li>
+      <li xml:lang="fr">Appels vidéo avec la caméra, le micro et les haut-parleurs de votre choix, ou appels avec le son seulement</li>
+      <li xml:lang="es">Videollamadas con la cámara, el micrófono y los altavoces que elija, o llamadas solo con sonido</li>
+      <li xml:lang="it">Videochiamate con fotocamera, microfono e altoparlanti a scelta, o chiamate solo con il suono</li>
+      <li>Share the screen and chat during a call</li>
+      <li xml:lang="de">Während eines Anrufs den Bildschirm zeigen und chatten</li>
+      <li xml:lang="fr">Partager l'écran et discuter pendant un appel</li>
+      <li xml:lang="es">Compartir la pantalla y chatear durante una llamada</li>
+      <li xml:lang="it">Condividere lo schermo e chattare durante una chiamata</li>
+      <li>A safety code shows that nobody sits between the two computers</li>
+      <li xml:lang="de">Ein Sicherheitscode zeigt, dass niemand zwischen den beiden Computern sitzt</li>
+      <li xml:lang="fr">Un code de sécurité montre que personne ne se trouve entre les deux ordinateurs</li>
+      <li xml:lang="es">Un código de seguridad muestra que nadie se interpone entre los dos ordenadores</li>
+      <li xml:lang="it">Un codice di sicurezza mostra che nessuno sta tra i due computer</li>
+      <li>Can wait for calls in the background after login</li>
+      <li xml:lang="de">Kann nach der Anmeldung im Hintergrund auf Anrufe warten</li>
+      <li xml:lang="fr">Peut attendre les appels en arrière-plan après la connexion</li>
+      <li xml:lang="es">Puede esperar llamadas en segundo plano tras iniciar sesión</li>
+      <li xml:lang="it">Può attendere chiamate in background dopo l'accesso</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">amade-call.desktop</launchable>
+  <icon type="stock">amade-call</icon>
+  <categories>
+    <category>Network</category>
+    <category>Telephony</category>
+    <category>VideoConference</category>
+  </categories>
+
+  <url type="homepage">https://github.com/amadeos-eu/amade-call</url>
+  <url type="bugtracker">https://github.com/amadeos-eu/amade-call/issues</url>
+  <developer id="eu.amadeos">
+    <name>amadeOS Project</name>
+  </developer>
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>A video call with the chat open</caption>
+      <caption xml:lang="de">Ein Videoanruf mit offenem Chat</caption>
+      <caption xml:lang="fr">Un appel vidéo avec le chat ouvert</caption>
+      <caption xml:lang="es">Una videollamada con el chat abierto</caption>
+      <caption xml:lang="it">Una videochiamata con la chat aperta</caption>
+      <image>https://raw.githubusercontent.com/amadeos-eu/amade-call/main/docs/screenshots/amade-call-video.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>The people in the network and the recent calls</caption>
+      <caption xml:lang="de">Die Personen im Netzwerk und die letzten Anrufe</caption>
+      <caption xml:lang="fr">Les personnes du réseau et les appels récents</caption>
+      <caption xml:lang="es">Las personas de la red y las llamadas recientes</caption>
+      <caption xml:lang="it">Le persone nella rete e le chiamate recenti</caption>
+      <image>https://raw.githubusercontent.com/amadeos-eu/amade-call/main/docs/screenshots/amade-call.png</image>
+    </screenshot>
+  </screenshots>
+
+  <provides>
+    <binary>amade-call</binary>
+  </provides>
+  <content_rating type="oars-1.1">
+    <content_attribute id="social-chat">intense</content_attribute>
+    <content_attribute id="social-audio">intense</content_attribute>
+  </content_rating>
+</component>

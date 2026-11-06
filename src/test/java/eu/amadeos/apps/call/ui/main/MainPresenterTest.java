@@ -1,0 +1,209 @@
+package eu.amadeos.apps.call.ui.main;
+
+import eu.amadeos.apps.call.domain.CallKind;
+import eu.amadeos.apps.call.domain.CallRecord;
+import eu.amadeos.apps.call.domain.PeerKey;
+import eu.amadeos.apps.call.domain.Person;
+import eu.amadeos.apps.call.domain.SafetyCode;
+import eu.amadeos.apps.call.media.Devices;
+import eu.amadeos.apps.call.service.Ringer;
+import eu.amadeos.commons.i18n.Messages;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
+
+import static eu.amadeos.apps.call.Wait.until;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * Two whole programs without windows: real phones over localhost with TLS, fake media and fake views. Every
+ * presenter call runs on its own "event thread", like in the program.
+ */
+class MainPresenterTest {
+    private static final Messages MSG = Messages.load(MainPresenter.class, "eu.amadeos.apps.call.messages", Locale.ENGLISH);
+
+    @TempDir
+    Path dir;
+    private TestSide anna;
+    private TestSide ben;
+
+    @BeforeEach
+    void start() throws Exception {
+        anna = new TestSide(dir.resolve("anna"), "Anna");
+        ben = new TestSide(dir.resolve("ben"), "Ben");
+        anna.start();
+        ben.start();
+    }
+
+    @AfterEach
+    void stop() throws Exception {
+        anna.shutdown();
+        ben.shutdown();
+    }
+
+    @Test
+    void aCallFromAddressToHangUpLeavesBothInTheLists() throws Exception {
+        Calling c = annaCallsBen(CallKind.VIDEO);
+        ben.on(() -> ben.presenter.accept(true));
+        until("both active", () -> c.annaWindow.active && ben.lastWindow().active);
+        TestSide.FakeView.Window benWindow = ben.lastWindow();
+        assertTrue(anna.ringer.contains(Ringer.Tone.RINGBACK));
+        assertTrue(ben.ringer.contains(Ringer.Tone.RING));
+        until("pictures", () -> c.annaWindow.remoteFrames > 0 && benWindow.remoteFrames > 0);
+
+        anna.on(() -> anna.presenter.sendChat("Hallo Ben"));
+        until("chat", () -> benWindow.chat.size() == 1);
+        assertEquals("Hallo Ben", benWindow.chat.getFirst().text());
+        assertFalse(benWindow.chat.getFirst().mine());
+
+        anna.on(() -> anna.presenter.toggleMicrophone());
+        until("muted", () -> benWindow.remoteMuted);
+        anna.on(() -> anna.presenter.toggleCamera());
+        until("camera off", () -> !benWindow.remoteCamera);
+        assertEquals(List.of(false, false, false, true), c.annaWindow.switches.getLast());
+        anna.on(() -> anna.presenter.toggleScreen());
+        until("screen", () -> benWindow.remoteScreen);
+
+        ben.on(() -> ben.presenter.hangUp());
+        until("both ended", () -> c.annaWindow.ended != null && benWindow.ended != null);
+        assertEquals(MSG.get("ended.remote-hung-up"), c.annaWindow.ended);
+        assertEquals(MSG.get("ended.hung-up"), benWindow.ended);
+
+        until("logged", () -> anna.log.all().size() == 1 && ben.log.all().size() == 1);
+        assertEquals(CallRecord.Direction.OUTGOING, anna.log.all().getFirst().direction());
+        assertEquals(CallRecord.Direction.INCOMING, ben.log.all().getFirst().direction());
+        Person annaSeen = ben.known.all().getFirst();
+        assertEquals("Anna", annaSeen.name());
+        Person benSeen = anna.known.all().getFirst();
+        assertEquals("Ben", benSeen.name());
+        assertEquals(ben.phone.port(), benSeen.endpoint().orElseThrow().port());
+        until("Ben listed", () -> anna.view.people.stream().anyMatch(p -> p.name().equals("Ben")));
+    }
+
+    @Test
+    void aDeclinedCall() throws Exception {
+        Calling c = annaCallsBen(CallKind.AUDIO);
+        ben.on(() -> ben.presenter.decline());
+        until("declined", () -> c.annaWindow.ended != null);
+        assertEquals(MSG.get("ended.declined"), c.annaWindow.ended);
+        until("incoming closed", () -> ben.view.incoming.closed);
+        until("logged", () -> ben.log.all().size() == 1);
+        assertEquals(CallKind.AUDIO, ben.log.all().getFirst().kind());
+    }
+
+    @Test
+    void aCallThatStopsRingingIsMissed() throws Exception {
+        Calling c = annaCallsBen(CallKind.VIDEO);
+        anna.on(() -> anna.presenter.hangUp());
+        until("missed", () -> ben.view.missed.size() == 1);
+        assertEquals("Anna", ben.view.missed.getFirst());
+        until("logged", () -> ben.log.all().size() == 1);
+        assertEquals(CallRecord.Direction.MISSED, ben.log.all().getFirst().direction());
+        assertTrue(ben.view.incoming.closed);
+        assertEquals(MSG.get("ended.hung-up"), c.annaWindow.ended);
+    }
+
+    @Test
+    void onlyOneCallAtATime() throws Exception {
+        annaCallsBen(CallKind.VIDEO);
+        anna.view.address = "127.0.0.1:" + ben.phone.port();
+        anna.on(() -> anna.presenter.callAddress(CallKind.VIDEO));
+        assertEquals(MSG.get("error.in-call"), anna.view.errors.getLast());
+    }
+
+    @Test
+    void addressesAreChecked() throws Exception {
+        anna.view.address = "not an address::";
+        anna.on(() -> anna.presenter.callAddress(CallKind.VIDEO));
+        assertEquals(MSG.format("error.address", "not an address::"), anna.view.errors.getLast());
+        anna.view.address = "127.0.0.1:1";
+        anna.on(() -> anna.presenter.callAddress(CallKind.VIDEO));
+        TestSide.FakeView.Window w = anna.lastWindow();
+        until("unreachable", () -> w.ended != null);
+        assertEquals(MSG.get("ended.unreachable"), w.ended);
+        assertTrue(anna.log.all().isEmpty(), "an unreachable address is not logged");
+    }
+
+    @Test
+    void theSafetyCodeIsKeptPerPerson() throws Exception {
+        PeerKey benKey = ben.phone.self();
+        anna.known.remember(benKey, "Ben", Optional.empty());
+        anna.on(() -> {
+            anna.presenter.select(benKey);
+            anna.view.verdict = MainView.Verdict.MATCH;
+            anna.presenter.verifySelected();
+        });
+        assertTrue(anna.known.verified(benKey));
+        assertEquals(SafetyCode.of(anna.phone.self(), benKey), anna.view.lastCode);
+        anna.on(() -> {
+            anna.view.verdict = MainView.Verdict.DIFFERENT;
+            anna.presenter.verifySelected();
+        });
+        assertFalse(anna.known.verified(benKey));
+        assertEquals(MSG.format("safety.warning", "Ben"), anna.view.errors.getLast());
+        anna.on(() -> {
+            anna.view.forget = true;
+            anna.presenter.forgetSelected();
+        });
+        assertTrue(anna.known.get(benKey).isEmpty());
+    }
+
+    @Test
+    void settingsAreKeptAndTheNameIsAnnounced() throws Exception {
+        SettingsModel before = anna.openSettings();
+        assertEquals("Anna", before.name());
+        assertEquals(List.of(new Devices.Choice("mic", "Microphone")), before.microphones());
+        anna.on(() -> anna.presenter.applySettings(new SettingsModel("Anna B.", Optional.empty(), Optional.of("mic"),
+                Optional.empty(), false, false, false, before.port() + 1, true, "", List.of(), List.of(), List.of())));
+        assertEquals("Anna B.", anna.preferences.name());
+        assertEquals(Optional.of("mic"), anna.preferences.microphone());
+        assertFalse(anna.preferences.cameraOnAtStart());
+        assertTrue(anna.autostart.enabled());
+        assertEquals(MSG.get("settings.port.restart"), anna.view.errors.getLast());
+        assertTrue(anna.view.status.startsWith(MSG.format("status.reachable", "Anna B.", String.valueOf(anna.phone.port()))));
+    }
+
+    @Test
+    void closingTheWindowHidesItWhenCallsAreAwaited() throws Exception {
+        anna.autostart.set(true);
+        anna.on(() -> anna.presenter.windowClosing());
+        assertTrue(anna.view.hidden);
+        assertFalse(anna.exited.get());
+        anna.autostart.set(false);
+        anna.on(() -> anna.presenter.windowClosing());
+        assertTrue(anna.exited.get());
+        assertTrue(anna.view.closed);
+    }
+
+    @Test
+    void missingPartsAreShownAtStart() throws Exception {
+        TestSide carl = new TestSide(dir.resolve("carl"), "Carl");
+        carl.media.missing = List.of("webrtcbin (gstreamer1.0-plugins-bad)");
+        carl.start();
+        assertEquals(List.of("webrtcbin (gstreamer1.0-plugins-bad)"), carl.view.missingParts);
+        carl.shutdown();
+    }
+
+    // ---------------------------------------------------------------- helpers
+
+    private record Calling(TestSide.FakeView.Window annaWindow) {
+    }
+
+    private Calling annaCallsBen(CallKind kind) throws Exception {
+        anna.view.address = "127.0.0.1:" + ben.phone.port();
+        anna.on(() -> anna.presenter.callAddress(kind));
+        TestSide.FakeView.Window window = anna.lastWindow();
+        until("Ben rings", () -> ben.view.incoming != null);
+        assertEquals("Anna", ben.view.incomingName);
+        until("Anna hears it ring", () -> window.phases.contains(MSG.format("phase.calling", "127.0.0.1:" + ben.phone.port())));
+        return new Calling(window);
+    }
+}

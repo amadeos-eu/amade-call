@@ -89,11 +89,11 @@ public class Phone implements AutoCloseable {
         synchronized (this) {
             if (current != null && current.live()) {
                 LOG.info("{} calls while another call runs: busy", hello.get().text("name"));
-                Call.busy(channel);
+                Call.busy(channel, name);
                 return;
             }
             Optional<Endpoint> back = Endpoint.parse(channel.remoteHost());
-            call = Call.incoming(channel, hello.get(), back, media, settings.get(), timers, clock);
+            call = Call.incoming(channel, hello.get(), name, back, media, settings.get(), timers, clock);
             current = call;
         }
         listener.incoming(call);

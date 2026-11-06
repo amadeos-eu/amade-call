@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
@@ -60,7 +61,7 @@ public final class AvahiBrowse {
                 String address = fields.get(7);
                 boolean ipv6 = "IPv6".equals(fields.get(2));
                 // A link-local IPv6 address needs the interface to be reachable.
-                if (ipv6 && address.toLowerCase(java.util.Locale.ROOT).startsWith("fe80") && !address.contains("%")) {
+                if (ipv6 && address.toLowerCase(Locale.ROOT).startsWith("fe80") && !address.contains("%")) {
                     address = address + "%" + fields.get(1);
                 }
                 String name = txt.getOrDefault("name", service);

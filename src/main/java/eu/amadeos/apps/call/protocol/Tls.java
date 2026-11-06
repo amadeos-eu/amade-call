@@ -11,6 +11,7 @@ import javax.net.ssl.X509TrustManager;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
 import java.security.cert.Certificate;
+import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 
 /**
@@ -46,21 +47,21 @@ public final class Tls {
      */
     private static final class AnyKey implements X509TrustManager {
         @Override
-        public void checkClientTrusted(X509Certificate[] chain, String authType) throws java.security.cert.CertificateException {
+        public void checkClientTrusted(X509Certificate[] chain, String authType) throws CertificateException {
             check(chain);
         }
 
         @Override
-        public void checkServerTrusted(X509Certificate[] chain, String authType) throws java.security.cert.CertificateException {
+        public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
             check(chain);
         }
 
-        private static void check(X509Certificate[] chain) throws java.security.cert.CertificateException {
-            if (chain == null || chain.length == 0) throw new java.security.cert.CertificateException("no certificate");
+        private static void check(X509Certificate[] chain) throws CertificateException {
+            if (chain == null || chain.length == 0) throw new CertificateException("no certificate");
             try {
                 chain[0].verify(chain[0].getPublicKey());
             } catch (GeneralSecurityException e) {
-                throw new java.security.cert.CertificateException("certificate not signed by its own key", e);
+                throw new CertificateException("certificate not signed by its own key", e);
             }
         }
 

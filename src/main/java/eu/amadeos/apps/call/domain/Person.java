@@ -1,5 +1,6 @@
 package eu.amadeos.apps.call.domain;
 
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -42,6 +43,6 @@ public record Person(PeerKey key, String name, Optional<Endpoint> endpoint, bool
             b.setLength(0);
             b.append(letters, 0, Math.min(2, letters.length()));
         }
-        return b.toString().toUpperCase(java.util.Locale.ROOT);
+        return b.toString().toUpperCase(Locale.ROOT);
     }
 }

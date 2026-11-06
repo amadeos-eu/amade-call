@@ -9,6 +9,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
@@ -91,7 +92,7 @@ public class IdentityStore {
         } catch (UnsupportedOperationException e) {
             LOG.debug("No POSIX permissions for {}", temp);
         }
-        Files.move(temp, file, java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+        Files.move(temp, file, StandardCopyOption.ATOMIC_MOVE);
         LOG.info("Made a new call key in {}", file);
     }
 }

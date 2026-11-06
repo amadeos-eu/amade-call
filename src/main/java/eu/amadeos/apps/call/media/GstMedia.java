@@ -6,8 +6,10 @@ import org.freedesktop.gstreamer.Version;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Calls with GStreamer: {@code webrtcbin} for the connection (ICE through libnice, DTLS-SRTP, RTP), VP8 and Opus
@@ -19,6 +21,17 @@ public final class GstMedia implements MediaFactory {
     private static final Logger LOG = LoggerFactory.getLogger(GstMedia.class);
     private static boolean initialised;
     private static String initError;
+
+    /** A still picture that stands in for the camera of test sources; empty for the moving test picture. */
+    private final Optional<Path> testPicture;
+
+    public GstMedia() {
+        this(Optional.empty());
+    }
+
+    public GstMedia(Optional<Path> testPicture) {
+        this.testPicture = testPicture;
+    }
 
     /** Starts GStreamer once per program; false when the library cannot be loaded. */
     static synchronized boolean init() {
@@ -37,7 +50,7 @@ public final class GstMedia implements MediaFactory {
     @Override
     public MediaSession create(MediaSettings settings, MediaEvents events) {
         if (!init()) throw new IllegalStateException("GStreamer: " + initError);
-        return new GstSession(settings, events);
+        return new GstSession(settings, events, testPicture);
     }
 
     @Override

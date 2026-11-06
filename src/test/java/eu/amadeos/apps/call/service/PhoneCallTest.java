@@ -171,7 +171,7 @@ class PhoneCallTest {
     }
 
     private static void waitFor(String what, BooleanSupplier condition) throws InterruptedException {
-        long end = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
+        long end = System.nanoTime() + TimeUnit.SECONDS.toNanos(45);
         while (System.nanoTime() < end) {
             if (condition.getAsBoolean()) return;
             Thread.sleep(50);

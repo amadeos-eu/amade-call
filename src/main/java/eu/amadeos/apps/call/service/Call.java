@@ -107,6 +107,8 @@ public final class Call {
     private SignalChannel channel;
     private PeerKey peer;
     private String peerName;
+    /** This side's name, sent with the answer of an incoming call. */
+    private String myName = "";
     private Optional<Endpoint> endpoint;
     private MediaSession session;
     private State state;
@@ -188,12 +190,14 @@ public final class Call {
     // ---------------------------------------------------------------- incoming
 
     /** A call that came in with its HELLO; it rings until {@link #accept} or {@link #decline}. */
-    public static Call incoming(SignalChannel channel, Signal hello, Optional<Endpoint> endpoint, MediaFactory media,
-                                MediaSettings mediaSettings, ScheduledExecutorService timers, Supplier<Instant> clock) {
+    public static Call incoming(SignalChannel channel, Signal hello, String myName, Optional<Endpoint> endpoint,
+                                MediaFactory media, MediaSettings mediaSettings, ScheduledExecutorService timers,
+                                Supplier<Instant> clock) {
         Call call = new Call(Direction.INCOMING, hello.kind(), media, mediaSettings.withOfferer(false), timers, clock);
         call.channel = channel;
         call.peer = channel.peer();
         call.peerName = hello.text("name");
+        call.myName = myName;
         call.endpoint = endpoint;
         call.remoteCameraOn = hello.kind().video() && !Boolean.FALSE.equals(hello.fields().get("video"));
         call.state = State.RINGING;
@@ -208,7 +212,7 @@ public final class Call {
                 synchronized (this) {
                     if (state != State.RINGING) return;
                 }
-                if (channel != null) channel.send(Signal.decline(false));
+                if (channel != null) channel.send(Signal.decline(myName, false));
                 end(EndReason.MISSED, false);
             }, INCOMING_RING_TIME.toMillis(), TimeUnit.MILLISECONDS);
         }
@@ -226,7 +230,7 @@ public final class Call {
         }
         // Ready for the offer before the caller hears the answer.
         startMedia();
-        channel.send(Signal.accept(cameraOn));
+        channel.send(Signal.accept(myName, cameraOn));
         listener.state(this, State.CONNECTING);
     }
 
@@ -234,13 +238,13 @@ public final class Call {
         synchronized (this) {
             if (state != State.RINGING) return;
         }
-        channel.send(Signal.decline(false));
+        channel.send(Signal.decline(myName, false));
         end(EndReason.DECLINED, false);
     }
 
     /** Tells a caller that this computer is in another call. */
-    public static void busy(SignalChannel channel) {
-        channel.send(Signal.decline(true));
+    public static void busy(SignalChannel channel, String myName) {
+        channel.send(Signal.decline(myName, true));
         channel.close();
     }
 
@@ -299,6 +303,12 @@ public final class Call {
 
     // ---------------------------------------------------------------- signals
 
+    /** The name the other side gives itself replaces the address a call was dialled with. */
+    private void learnName(Signal signal) {
+        String name = signal.text("name").strip();
+        if (!name.isEmpty()) peerName = name.length() > 80 ? name.substring(0, 80) : name;
+    }
+
     void onSignal(Signal signal) {
         switch (signal.type()) {
             case ACCEPT -> {
@@ -307,12 +317,18 @@ public final class Call {
                     cancelRing();
                     state = State.CONNECTING;
                     remoteCameraOn = signal.flag("video");
+                    learnName(signal);
                 }
                 startMedia();
                 listener.remoteCamera(remoteCameraOn);
                 listener.state(this, State.CONNECTING);
             }
-            case DECLINE -> end("busy".equals(signal.text("reason")) ? EndReason.BUSY : EndReason.DECLINED, false);
+            case DECLINE -> {
+                synchronized (this) {
+                    learnName(signal);
+                }
+                end("busy".equals(signal.text("reason")) ? EndReason.BUSY : EndReason.DECLINED, false);
+            }
             case OFFER, ANSWER -> {
                 MediaSession s;
                 synchronized (this) {

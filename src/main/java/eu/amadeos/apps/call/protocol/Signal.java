@@ -63,12 +63,13 @@ public record Signal(Type type, Map<String, Object> fields) {
                 "video", video, "version", VERSION));
     }
 
-    public static Signal accept(boolean video) {
-        return new Signal(Type.ACCEPT, Map.of("video", video));
+    /** {@code name} is how the answering side calls itself, for callers who dialled an address. */
+    public static Signal accept(String name, boolean video) {
+        return new Signal(Type.ACCEPT, Map.of("name", name, "video", video));
     }
 
-    public static Signal decline(boolean busy) {
-        return new Signal(Type.DECLINE, Map.of("reason", busy ? "busy" : "declined"));
+    public static Signal decline(String name, boolean busy) {
+        return new Signal(Type.DECLINE, Map.of("name", name, "reason", busy ? "busy" : "declined"));
     }
 
     public static Signal offer(String sdp) {
