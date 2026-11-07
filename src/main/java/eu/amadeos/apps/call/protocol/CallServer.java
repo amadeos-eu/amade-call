@@ -79,6 +79,7 @@ public class CallServer implements AutoCloseable {
         }
     }
 
+    // --8<-- [start:dial]
     /** Opens the connection of an outgoing call. */
     public static SignalChannel dial(SSLContext tls, Endpoint endpoint, int timeoutMillis) throws IOException {
         SSLSocket socket = (SSLSocket) tls.getSocketFactory().createSocket();
@@ -94,6 +95,7 @@ public class CallServer implements AutoCloseable {
             throw e;
         }
     }
+    // --8<-- [end:dial]
 
     @Override
     public void close() {
