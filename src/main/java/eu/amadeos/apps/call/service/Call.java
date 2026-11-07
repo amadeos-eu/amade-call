@@ -233,6 +233,7 @@ public final class Call {
         startMedia();
         channel.send(Signal.accept(myName, cameraOn));
         listener.state(this, State.CONNECTING);
+        if (!kind.media()) new Events().connected();
     }
 
     public void decline() {
@@ -324,6 +325,8 @@ public final class Call {
                 startMedia();
                 listener.remoteCamera(remoteCameraOn);
                 listener.state(this, State.CONNECTING);
+                // A chat has no picture and sound to wait for: it is open once it is accepted.
+                if (!kind.media()) new Events().connected();
             }
             case DECLINE -> {
                 synchronized (this) {
@@ -386,6 +389,7 @@ public final class Call {
      * the pipeline starts, and those callbacks send through this call.
      */
     private void startMedia() {
+        if (!kind.media()) return;
         MediaSession s;
         boolean mic;
         try {

@@ -102,6 +102,15 @@ public class CallPreferences {
         set("camera.on-at-start", on ? null : "false");
     }
 
+    /** Whether the chat with each person is kept (encrypted) on this computer; on by default. */
+    public boolean keepChats() {
+        return !"false".equals(properties.getProperty("chat.keep"));
+    }
+
+    public void setKeepChats(boolean on) {
+        set("chat.keep", on ? null : "false");
+    }
+
     private Optional<String> text(String key) {
         String v = properties.getProperty(key);
         return v == null || v.isBlank() ? Optional.empty() : Optional.of(v.strip());

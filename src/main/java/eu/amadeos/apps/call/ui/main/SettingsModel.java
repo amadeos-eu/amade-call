@@ -18,10 +18,13 @@ import java.util.Optional;
  * @param port             the call port
  * @param waitAfterLogin   start in the background at login, so that calls come in
  * @param ownKey           this computer's key fingerprint, shown for the curious
+ * @param keepChats        the chat with each person is kept, encrypted, on this computer
+ * @param chatsAvailable   the login keyring holds the key of the kept chats
  */
 public record SettingsModel(String name, Optional<String> camera, Optional<String> microphone, Optional<String> speaker,
                             boolean cameraOnAtStart, boolean echoCancellation, boolean echoAvailable, int port,
-                            boolean waitAfterLogin, String ownKey, List<Devices.Choice> cameras,
+                            boolean waitAfterLogin, String ownKey, boolean keepChats, boolean chatsAvailable,
+                            List<Devices.Choice> cameras,
                             List<Devices.Choice> microphones, List<Devices.Choice> speakers) {
     public SettingsModel {
         cameras = List.copyOf(cameras);

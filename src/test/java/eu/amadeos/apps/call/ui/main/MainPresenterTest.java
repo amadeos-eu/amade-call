@@ -89,6 +89,107 @@ class MainPresenterTest {
     }
 
     @Test
+    void aChatHasTextButNoPictureOrSound() throws Exception {
+        Calling c = annaCallsBen(CallKind.CHAT);
+        assertEquals(CallKind.CHAT, ben.view.incomingKind);
+        ben.on(() -> ben.presenter.accept(true));
+        until("both open", () -> c.annaWindow.active && ben.lastWindow().active);
+        assertEquals(CallKind.CHAT, ben.lastWindow().kind);
+        assertTrue(anna.media.sessions.isEmpty() && ben.media.sessions.isEmpty(), "no media for a chat");
+        anna.on(() -> anna.presenter.sendChat("Zeit für einen Anruf?"));
+        until("Ben reads it", () -> ben.lastWindow().chat.size() == 1);
+        ben.on(() -> ben.presenter.hangUp());
+        until("logged", () -> anna.log.all().size() == 1 && ben.log.all().size() == 1);
+        assertEquals(CallKind.CHAT, anna.log.all().getFirst().kind());
+    }
+
+    @Test
+    void fromAChatToAVideoCallTheLinesMoveAlong() throws Exception {
+        Calling c = annaCallsBen(CallKind.CHAT);
+        ben.on(() -> ben.presenter.accept(true));
+        TestSide.FakeView.Window benChat = ben.lastWindow();
+        until("both open", () -> c.annaWindow.active && benChat.active);
+        anna.on(() -> anna.presenter.sendChat("Zeit für einen Anruf?"));
+        until("Ben reads it", () -> benChat.chat.size() == 1);
+        ben.on(() -> ben.presenter.sendChat("Ja, gern"));
+        until("Anna reads it", () -> c.annaWindow.chat.size() == 2);
+        ben.view.incoming = null;
+
+        anna.on(() -> anna.presenter.switchCall(CallKind.VIDEO));
+        until("Ben rings again", () -> ben.view.incoming != null);
+        assertEquals(CallKind.VIDEO, ben.view.incomingKind);
+        TestSide.FakeView.Window annaCall = anna.lastWindow();
+        assertEquals(CallKind.VIDEO, annaCall.kind);
+        assertTrue(c.annaWindow.closed, "Anna's chat window makes way for the call");
+        assertEquals(List.of("Zeit für einen Anruf?", "Ja, gern"),
+                annaCall.chat.stream().map(l -> l.text()).toList());
+
+        ben.on(() -> ben.presenter.accept(true));
+        TestSide.FakeView.Window benCall = ben.lastWindow();
+        until("both active", () -> annaCall.active && benCall.active);
+        assertTrue(benChat.closed, "Ben's chat window makes way for the call");
+        assertEquals(List.of("Zeit für einen Anruf?", "Ja, gern"),
+                benCall.chat.stream().map(l -> l.text()).toList());
+        assertTrue(benCall.chat.get(1).mine());
+        until("pictures", () -> annaCall.remoteFrames > 0 && benCall.remoteFrames > 0);
+    }
+
+    @Test
+    void theNextChatShowsTheKeptOne() throws Exception {
+        Calling c = annaCallsBen(CallKind.CHAT);
+        ben.on(() -> ben.presenter.accept(true));
+        until("both open", () -> c.annaWindow.active && ben.lastWindow().active);
+        anna.on(() -> anna.presenter.sendChat("Hallo Ben"));
+        until("Ben reads it", () -> ben.lastWindow().chat.size() == 1);
+        ben.on(() -> ben.presenter.sendChat("Hallo Anna"));
+        until("Anna reads it", () -> c.annaWindow.chat.size() == 2);
+        anna.on(() -> anna.presenter.hangUp());
+        until("ended", () -> c.annaWindow.ended != null && ben.lastWindow().ended != null);
+        until("kept", () -> anna.chats.load(ben.phone.self()).size() == 2 && ben.chats.load(anna.phone.self()).size() == 2);
+        assertFalse(java.nio.file.Files.readString(dir.resolve("anna").resolve("chats")
+                .resolve(ben.phone.self().hex() + ".chat"), java.nio.charset.StandardCharsets.ISO_8859_1)
+                .contains("Hallo"), "the file is encrypted");
+
+        ben.view.incoming = null;
+        Calling again = annaCallsBen(CallKind.AUDIO);
+        ben.on(() -> ben.presenter.accept(true));
+        until("history shown", () -> again.annaWindow.history.size() == 2 && ben.lastWindow().history.size() == 2);
+        assertEquals("Hallo Ben", again.annaWindow.history.getFirst().text());
+        assertTrue(again.annaWindow.history.getFirst().mine());
+        assertFalse(ben.lastWindow().history.getFirst().mine());
+        anna.on(() -> anna.presenter.hangUp());
+        until("ended again", () -> again.annaWindow.ended != null);
+
+        anna.on(() -> anna.presenter.select(ben.phone.self()));
+        anna.view.forget = true;
+        anna.on(() -> anna.presenter.clearChatSelected());
+        until("cleared", () -> anna.chats.load(ben.phone.self()).isEmpty());
+        assertEquals(2, ben.chats.load(anna.phone.self()).size(), "Ben keeps his");
+    }
+
+    @Test
+    void aLinkFromContactsCallsAndThePersonGoesIntoContacts() throws Exception {
+        anna.known.remember(ben.phone.self(), "Ben", Optional.of(new eu.amadeos.apps.call.domain.Endpoint("127.0.0.1", ben.phone.port())));
+        anna.on(() -> anna.presenter.select(ben.phone.self()));
+        anna.on(() -> anna.presenter.addToContacts());
+        until("added", () -> anna.view.infos.size() == 1);
+        eu.amadeos.apps.call.repository.AddressBook book = new eu.amadeos.apps.call.repository.AddressBook(
+                dir.resolve("anna").resolve("contacts"));
+        assertTrue(book.contacts().getFirst().links(ben.phone.self()));
+        anna.on(() -> anna.presenter.addToContacts());
+        until("already there", () -> anna.view.infos.size() == 2);
+        assertEquals(MSG.format("info.contact.already", "Ben", "Ben"), anna.view.infos.getLast());
+
+        anna.on(() -> anna.presenter.message("call amadeos-call:" + ben.phone.self().hex() + "?kind=chat"));
+        until("Ben asked to chat", () -> ben.view.incoming != null);
+        assertEquals(CallKind.CHAT, ben.view.incomingKind);
+        assertEquals(CallKind.CHAT, anna.lastWindow().kind);
+        // End it, so nothing writes into the temporary folder while it is deleted.
+        ben.on(() -> ben.presenter.decline());
+        until("logged", () -> anna.log.all().size() == 1 && ben.log.all().size() == 1);
+    }
+
+    @Test
     void aDeclinedCall() throws Exception {
         Calling c = annaCallsBen(CallKind.AUDIO);
         ben.on(() -> ben.presenter.decline());
@@ -162,11 +263,14 @@ class MainPresenterTest {
         assertEquals("Anna", before.name());
         assertEquals(List.of(new Devices.Choice("mic", "Microphone")), before.microphones());
         anna.on(() -> anna.presenter.applySettings(new SettingsModel("Anna B.", Optional.empty(), Optional.of("mic"),
-                Optional.empty(), false, false, false, before.port() + 1, true, "", List.of(), List.of(), List.of())));
+                Optional.empty(), false, false, false, before.port() + 1, true, "", false, true, List.of(), List.of(),
+                List.of())));
         assertEquals("Anna B.", anna.preferences.name());
         assertEquals(Optional.of("mic"), anna.preferences.microphone());
         assertFalse(anna.preferences.cameraOnAtStart());
         assertTrue(anna.autostart.enabled());
+        assertTrue(before.keepChats() && before.chatsAvailable());
+        assertFalse(anna.preferences.keepChats());
         assertEquals(MSG.get("settings.port.restart"), anna.view.errors.getLast());
         assertTrue(anna.view.status.startsWith(MSG.format("status.reachable", "Anna B.", String.valueOf(anna.phone.port()))));
     }

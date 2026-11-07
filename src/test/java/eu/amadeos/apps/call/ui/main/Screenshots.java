@@ -140,6 +140,23 @@ public final class Screenshots {
         Thread.sleep(500);
         save(frame("incoming"), out.resolve("amade-call-incoming.png"));
         anna.on(() -> anna.presenter.decline());
+        until("Ben's call over", () -> ben.lastWindow().ended != null);
+        Thread.sleep(3500);
+
+        // A chat without picture and sound.
+        ben.view.incoming = null;
+        anna.on(() -> anna.presenter.select(ben.phone.self()));
+        anna.on(() -> anna.presenter.callSelected(CallKind.CHAT));
+        until("Ben asked to chat", () -> ben.view.incoming != null);
+        ben.on(() -> ben.presenter.accept(true));
+        until("chat open", () -> ben.lastWindow().active);
+        anna.on(() -> anna.presenter.sendChat("Do you have a minute? The plumber can come on Thursday."));
+        Thread.sleep(400);
+        ben.on(() -> ben.presenter.sendChat("Thursday works. Shall we talk it through?"));
+        Thread.sleep(1500);
+        save(frame("call-window"), out.resolve("amade-call-chat.png"));
+        anna.on(() -> anna.presenter.hangUp());
+        Thread.sleep(500);
 
         anna.shutdown();
         ben.shutdown();
@@ -153,9 +170,10 @@ public final class Screenshots {
         return file;
     }
 
+    /** The newest showing window of that name. */
     private static Frame frame(String name) {
-        return Arrays.stream(Frame.getFrames()).filter(f -> name.equals(f.getName()) && f.isShowing()).findFirst()
-                .orElse(null);
+        return Arrays.stream(Frame.getFrames()).filter(f -> name.equals(f.getName()) && f.isShowing())
+                .reduce((first, second) -> second).orElse(null);
     }
 
     private static void save(Frame frame, Path file) throws Exception {

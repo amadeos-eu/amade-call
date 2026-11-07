@@ -1,6 +1,7 @@
 package eu.amadeos.apps.call.ui.main;
 
 import eu.amadeos.apps.call.domain.CallKind;
+import eu.amadeos.apps.call.domain.CallLink;
 import eu.amadeos.apps.call.domain.CallRecord;
 import eu.amadeos.apps.call.domain.ChatLine;
 import eu.amadeos.apps.call.domain.EndReason;
@@ -12,8 +13,10 @@ import eu.amadeos.apps.call.media.Devices;
 import eu.amadeos.apps.call.media.MediaFactory;
 import eu.amadeos.apps.call.media.MediaSettings;
 import eu.amadeos.apps.call.media.Sources;
+import eu.amadeos.apps.call.repository.AddressBook;
 import eu.amadeos.apps.call.repository.CallLog;
 import eu.amadeos.apps.call.repository.CallPreferences;
+import eu.amadeos.apps.call.repository.ChatHistory;
 import eu.amadeos.apps.call.repository.KnownPeers;
 import eu.amadeos.apps.call.service.Autostart;
 import eu.amadeos.apps.call.service.Call;
@@ -65,7 +68,9 @@ public class MainPresenter {
 
     /** What the presenter works with. */
     public record Services(Phone phone, MediaFactory media, Devices devices, KnownPeers known, CallLog log,
-                           CallPreferences preferences, Autostart autostart, Ringer ringer, Sources sources,
+                           CallPreferences preferences, ChatHistory chats, AddressBook contacts,
+                           Autostart autostart, Ringer ringer,
+                           Sources sources,
                            ExecutorService background, Executor ui, Supplier<Instant> clock, Runnable exit) {
     }
 
@@ -77,12 +82,25 @@ public class MainPresenter {
     private Optional<PeerKey> selected = Optional.empty();
     private boolean discovery = true;
     private boolean started;
+    /** A link that came before the call port was open. */
+    private CallLink pendingLink;
     /** This computer's name and addresses in the network, for the status line. */
     private String ownAddress = "";
     private String lastAddress = "";
     private Call call;
     private CallView callView;
     private IncomingView incomingView;
+    /** The lines of the last chat (text only) with each person, so that a call that follows it carries them on. */
+    private final Map<PeerKey, RecentChat> recentChats = new HashMap<>();
+    /** The kind of call that follows the running chat, once the chat has ended. */
+    private CallKind switchTo;
+
+    /** A chat that ended at {@code ended}, with its window while that is still open. */
+    private record RecentChat(List<ChatLine> lines, Instant ended, CallView window) {
+    }
+
+    /** How long after a chat a call with the same person still carries its lines. */
+    static final Duration CHAT_CARRIES_OVER = Duration.ofMinutes(2);
 
     public MainPresenter(MainView view, Messages msg, LocaleSettings locales, Services services) {
         this.view = view;
@@ -107,6 +125,11 @@ public class MainPresenter {
                     ownAddress = address;
                     started = true;
                     showStatus();
+                    if (pendingLink != null) {
+                        CallLink link = pendingLink;
+                        pendingLink = null;
+                        open(link);
+                    }
                 });
             } catch (IOException | RuntimeException e) {
                 LOG.error("amade-call could not start", e);
@@ -133,8 +156,64 @@ public class MainPresenter {
     }
 
     /** From a second start of the program: show the window. */
+    /** A wish from a second start: show the window, and maybe call ({@code call amadeos-call:...}). */
     public void message(String text) {
-        s.ui().execute(view::bringToFront);
+        s.ui().execute(() -> {
+            view.bringToFront();
+            if (text.startsWith("call ")) CallLink.parse(text.substring(5)).ifPresent(this::open);
+        });
+    }
+
+    /** Calls the person of a link, for example from Contacts; waits for the start when it comes early. */
+    public void open(CallLink link) {
+        if (!started) {
+            pendingLink = link;
+            return;
+        }
+        Optional<Person> person = people().stream().filter(p -> p.key().equals(link.key())).findFirst();
+        if (person.isEmpty()) {
+            view.showError(msg.get("error.link.unknown"));
+            return;
+        }
+        select(link.key());
+        call(person.get(), link.kind());
+    }
+
+    /** Person → Add to Contacts: the link into a contact of the address book, or a new contact. */
+    public void addToContacts() {
+        Optional<Person> person = selectedPerson();
+        if (person.isEmpty()) return;
+        Person p = person.get();
+        s.background().execute(() -> {
+            List<AddressBook.Entry> all = s.contacts().contacts();
+            s.ui().execute(() -> {
+                Optional<AddressBook.Entry> linked = all.stream().filter(e -> e.links(p.key())).findFirst();
+                if (linked.isPresent()) {
+                    view.showInfo(msg.format("info.contact.already", p.name(), linked.get().name()));
+                    return;
+                }
+                List<String> names = all.stream().map(AddressBook.Entry::name).toList();
+                Optional<Integer> choice = view.chooseContact(p.name(), names);
+                if (choice.isEmpty()) return;
+                int i = choice.get();
+                s.background().execute(() -> {
+                    try {
+                        String target;
+                        if (i < 0) {
+                            s.contacts().create(p.name(), p.key(), s.clock().get());
+                            target = p.name();
+                        } else {
+                            s.contacts().link(all.get(i).file(), p.key());
+                            target = all.get(i).name();
+                        }
+                        s.ui().execute(() -> view.showInfo(msg.format("info.contact.added", p.name(), target)));
+                    } catch (IOException | RuntimeException e) {
+                        LOG.warn("No contact for {}", p.name(), e);
+                        s.ui().execute(() -> view.showError(msg.format("error.contact", e.getMessage())));
+                    }
+                });
+            });
+        });
     }
 
     // ---------------------------------------------------------------- the list of people
@@ -256,6 +335,7 @@ public class MainPresenter {
         events.call = call;
         listeners.put(call, events);
         callView = window;
+        expected.ifPresent(k -> carryChat(k, window));
         window.showPhase(msg.format("phase.dialing", name));
         window.showSwitches(true, call.cameraOn(), false, kind.video());
         s.ringer().start(Ringer.Tone.RINGBACK);
@@ -286,6 +366,8 @@ public class MainPresenter {
         incomingView = null;
         boolean verified = c.peer().map(s.known()::verified).orElse(false);
         callView = view.openCall(c.peerName(), c.kind(), verified);
+        CallView opened = callView;
+        c.peer().ifPresent(k -> carryChat(k, opened));
         callView.showPhase(msg.get("phase.connecting"));
         callView.showRemoteCamera(c.remoteCameraOn());
         callView.showSwitches(true, c.kind().video() && withCamera, false, c.kind().video());
@@ -375,7 +457,16 @@ public class MainPresenter {
         selectedPerson().ifPresent(p -> {
             if (!view.confirmForget(p.name())) return;
             s.known().forget(p.key());
+            s.background().execute(() -> s.chats().delete(p.key()));
             refreshPeople();
+        });
+    }
+
+    /** Deletes the kept chat with the selected person. */
+    public void clearChatSelected() {
+        selectedPerson().ifPresent(p -> {
+            if (!view.confirmClearChat(p.name())) return;
+            s.background().execute(() -> s.chats().delete(p.key()));
         });
     }
 
@@ -383,6 +474,10 @@ public class MainPresenter {
     private final class CallEvents implements Call.Listener {
         Call call;
         CallView window;
+        /** Every chat line of this call, mine and theirs. */
+        final List<ChatLine> lines = new ArrayList<>();
+        /** The kept chat with this person was asked for. */
+        private boolean historyAsked;
         private final AtomicReference<BufferedImage> remote = new AtomicReference<>();
         private final AtomicReference<BufferedImage> local = new AtomicReference<>();
         private final AtomicBoolean remoteQueued = new AtomicBoolean();
@@ -401,10 +496,12 @@ public class MainPresenter {
                     case CONNECTING -> {
                         s.ringer().stop();
                         window.showPhase(msg.get("phase.connecting"));
+                        showHistory(c);
                     }
                     case ACTIVE -> {
                         window.showPhase("");
                         window.showActive(s.clock().get());
+                        showHistory(c);
                     }
                     default -> {
                     }
@@ -442,7 +539,24 @@ public class MainPresenter {
         @Override
         public void chat(ChatLine line) {
             s.ui().execute(() -> {
+                lines.add(line);
                 if (window != null) window.showChat(line);
+                if (s.preferences().keepChats()) {
+                    call.peer().ifPresent(k -> s.background().execute(() -> s.chats().add(k, List.of(line))));
+                }
+            });
+        }
+
+        /** Once the other side is known: the kept chat with them, above the lines of this call. */
+        private void showHistory(Call c) {
+            if (historyAsked || window == null || !s.preferences().keepChats() || c.peer().isEmpty()) return;
+            historyAsked = true;
+            PeerKey peer = c.peer().get();
+            CallView w = window;
+            s.background().execute(() -> {
+                List<ChatLine> earlier = s.chats().load(peer);
+                if (earlier.isEmpty()) return;
+                s.ui().execute(() -> w.showHistory(earlier.stream().filter(l -> !lines.contains(l)).toList()));
             });
         }
 
@@ -486,7 +600,11 @@ public class MainPresenter {
 
     private void callEnded(Call c, EndReason reason, CallView window) {
         s.ringer().stop();
-        listeners.remove(c);
+        CallEvents events = listeners.remove(c);
+        if (events != null && !c.kind().media() && !events.lines.isEmpty()) {
+            c.peer().ifPresent(k -> recentChats.put(k, new RecentChat(List.copyOf(events.lines), s.clock().get(),
+                    window)));
+        }
         if (c == call && incomingView != null) {
             incomingView.close();
             incomingView = null;
@@ -500,6 +618,30 @@ public class MainPresenter {
         }
         if (c == call) call = null;
         refreshPeople();
+        CallKind next = switchTo;
+        switchTo = null;
+        if (next != null && !c.kind().media() && call == null) {
+            c.peer().flatMap(k -> s.known().get(k)).filter(Person::callable).ifPresent(p -> call(p, next));
+        }
+    }
+
+    /**
+     * From the running chat to a video or sound call with the same person: the chat ends, the call starts, and
+     * the call window shows the chat so far.
+     */
+    public void switchCall(CallKind kind) {
+        if (call == null || !call.live() || call.kind().media() || !kind.media()) return;
+        switchTo = kind;
+        call.hangUp();
+    }
+
+    /** A new call with {@code peer}: the lines of a chat that just ended move into its window. */
+    private void carryChat(PeerKey peer, CallView window) {
+        RecentChat recent = recentChats.remove(peer);
+        if (recent == null || recent.ended().plus(CHAT_CARRIES_OVER).isBefore(s.clock().get())) return;
+        if (recent.window() != null) recent.window().close();
+        listenerOf(call).ifPresent(e -> e.lines.addAll(recent.lines()));
+        for (ChatLine line : recent.lines()) window.showChat(line);
     }
 
     /** Keeps the call in the list of recent calls and the person in the list of people. */
@@ -525,18 +667,21 @@ public class MainPresenter {
             Future<List<Devices.Choice>> mics = ask("microphones", () -> s.devices().microphones());
             Future<List<Devices.Choice>> speakers = ask("speakers", () -> s.devices().speakers());
             Future<Boolean> echo = ask("echo", () -> s.media().missing(Sources.HEADLESS).isEmpty() && hasEcho());
+            Future<Boolean> keyring = ask("keyring", () -> s.chats().available());
             long deadline = System.nanoTime() + DEVICE_WAIT.toNanos();
             List<Devices.Choice> cameraList = answer("cameras", cameras, deadline, List.of());
             List<Devices.Choice> micList = answer("microphones", mics, deadline, List.of());
             List<Devices.Choice> speakerList = answer("speakers", speakers, deadline, List.of());
             boolean echoAvailable = answer("echo", echo, deadline, false);
+            // The keyring may ask to be unlocked; that may take longer than the devices.
+            boolean chatsAvailable = answer("keyring", keyring, deadline + KEYRING_WAIT.toNanos(), false);
             s.ui().execute(() -> {
                 try {
                     CallPreferences p = s.preferences();
                     SettingsModel model = new SettingsModel(p.name(), p.camera(), p.microphone(), p.speaker(),
                             p.cameraOnAtStart(), p.echoCancellation(), echoAvailable, p.port(),
                             s.autostart().enabled(), s.phone().self() == null ? "" : s.phone().self().hex(),
-                            cameraList, micList, speakerList);
+                            p.keepChats(), chatsAvailable, cameraList, micList, speakerList);
                     view.showSettings(model, this::applySettings);
                 } catch (RuntimeException e) {
                     LOG.error("The settings could not be opened", e);
@@ -548,6 +693,7 @@ public class MainPresenter {
 
     /** How long the settings wait for the lists of cameras, microphones and speakers. */
     static final Duration DEVICE_WAIT = Duration.ofSeconds(5);
+    static final Duration KEYRING_WAIT = Duration.ofSeconds(25);
 
     /** Runs one question on a thread of its own (GStreamer and pactl block in native code). */
     private static <T> Future<T> ask(String what, Callable<T> question) {
@@ -588,6 +734,7 @@ public class MainPresenter {
         p.setCameraOnAtStart(m.cameraOnAtStart());
         p.setEchoCancellation(m.echoCancellation());
         p.setPort(m.port());
+        p.setKeepChats(m.keepChats());
         try {
             s.autostart().set(m.waitAfterLogin());
         } catch (IOException e) {

@@ -5,7 +5,9 @@ import eu.amadeos.apps.call.ui.main.Avatar;
 import eu.amadeos.apps.call.ui.main.LockIcon;
 import eu.amadeos.apps.call.ui.main.MainPresenter;
 import eu.amadeos.commons.i18n.Messages;
+import eu.amadeos.apps.call.ui.CallGlyph;
 import eu.amadeos.commons.i18n.Mnemonics;
+import eu.amadeos.commons.swing.ToolIcon;
 import eu.amadeos.commons.swing.AmadeUI;
 
 import javax.swing.BorderFactory;
@@ -24,6 +26,7 @@ import java.awt.Image;
 import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.util.Locale;
 
 /**
  * A call rings: a small window of its own, above the others, with the caller's name and avatar and Accept,
@@ -56,7 +59,7 @@ public final class IncomingCallDialog extends JFrame implements IncomingView {
         who.setName("incoming.name");
         who.setFont(who.getFont().deriveFont(Font.BOLD, who.getFont().getSize2D() * 1.5f));
         p.add(centre(who));
-        p.add(centre(new JLabel(msg.get(kind.video() ? "incoming.video" : "incoming.audio"))));
+        p.add(centre(new JLabel(msg.get("incoming." + kind.name().toLowerCase(Locale.ROOT)))));
         JLabel trust = new JLabel(msg.get(verified ? "incoming.verified" : known ? "incoming.known" : "incoming.unknown"));
         trust.setIcon(new LockIcon(verified ? LockIcon.VERIFIED : LockIcon.OPEN));
         if (verified) trust.setForeground(LockIcon.VERIFIED);
@@ -68,6 +71,9 @@ public final class IncomingCallDialog extends JFrame implements IncomingView {
         accept.setFont(accept.getFont().deriveFont(Font.BOLD));
         button(audioOnly, msg.get("incoming.audio-only"), "incoming.audio-only", () -> presenter.accept(false));
         button(decline, msg.get("incoming.decline"), "incoming.decline", presenter::decline);
+        accept.setIcon(new ToolIcon(kind.video() ? CallGlyph.CAMERA : kind.media() ? CallGlyph.AUDIO_CALL : CallGlyph.CHAT));
+        audioOnly.setIcon(new ToolIcon(CallGlyph.AUDIO_CALL));
+        decline.setIcon(new ToolIcon(CallGlyph.HANG_UP));
         buttons.add(accept);
         if (kind.video()) buttons.add(audioOnly);
         buttons.add(decline);

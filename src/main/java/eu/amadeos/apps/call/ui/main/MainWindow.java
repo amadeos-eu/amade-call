@@ -6,6 +6,7 @@ import eu.amadeos.apps.call.domain.CallRecord;
 import eu.amadeos.apps.call.domain.PeerKey;
 import eu.amadeos.apps.call.domain.Person;
 import eu.amadeos.apps.call.domain.SafetyCode;
+import eu.amadeos.apps.call.ui.CallGlyph;
 import eu.amadeos.apps.call.ui.call.CallView;
 import eu.amadeos.apps.call.ui.call.CallWindow;
 import eu.amadeos.apps.call.ui.dialogs.IncomingCallDialog;
@@ -45,6 +46,7 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.Insets;
 import java.awt.Frame;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -260,16 +262,19 @@ public final class MainWindow extends JFrame implements MainView {
         p.add(Box.createVerticalStrut(12));
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        JButton video = button("details.video", () -> presenter.callSelected(CallKind.VIDEO));
-        video.setFont(video.getFont().deriveFont(Font.BOLD));
-        JButton audio = button("details.audio", () -> presenter.callSelected(CallKind.AUDIO));
-        JButton verify = button("details.verify", presenter::verifySelected);
+        JButton video = button("details.video", CallGlyph.CAMERA, () -> presenter.callSelected(CallKind.VIDEO));
+        JButton audio = button("details.audio", CallGlyph.AUDIO_CALL, () -> presenter.callSelected(CallKind.AUDIO));
+        JButton chat = button("details.chat", CallGlyph.CHAT, () -> presenter.callSelected(CallKind.CHAT));
+        JButton verify = button("details.verify", CallGlyph.VERIFY, presenter::verifySelected);
         boolean callable = person.callable() && !inCall;
         video.setEnabled(callable);
         audio.setEnabled(callable);
+        chat.setEnabled(callable);
         buttons.add(video);
         buttons.add(Box.createHorizontalStrut(8));
         buttons.add(audio);
+        buttons.add(Box.createHorizontalStrut(8));
+        buttons.add(chat);
         buttons.add(Box.createHorizontalStrut(8));
         buttons.add(verify);
         p.add(left(buttons));
@@ -290,7 +295,7 @@ public final class MainWindow extends JFrame implements MainView {
             };
             String text = arrow + "  " + time + "   " + switch (r.direction()) {
                 case MISSED -> msg.get("recent.missed");
-                default -> msg.get(r.kind() == CallKind.VIDEO ? "recent.video" : "recent.audio")
+                default -> msg.get("recent." + r.kind().name().toLowerCase(Locale.ROOT))
                         + (r.length().isZero() ? "   " + msg.get("recent.not-answered") : "   " + length(r.length()));
             };
             JLabel line = new JLabel(text);
@@ -309,8 +314,10 @@ public final class MainWindow extends JFrame implements MainView {
         return String.format("%d h %02d min", s / 3600, (s / 60) % 60);
     }
 
-    private JButton button(String key, Runnable action) {
-        JButton b = Mnemonics.apply(new JButton(), msg.get(key));
+    /** A button with only an icon; its text is the tooltip. */
+    private JButton button(String key, CallGlyph glyph, Runnable action) {
+        JButton b = glyph.on(new JButton(), msg.get(key), null);
+        b.setMargin(new Insets(4, 10, 4, 10));
         b.setName(key);
         b.addActionListener(e -> action.run());
         return b;
@@ -375,6 +382,36 @@ public final class MainWindow extends JFrame implements MainView {
     public Verdict askSafetyCode(String name, SafetyCode code, boolean verified) {
         Component owner = calls.isEmpty() ? this : calls.getLast();
         return SafetyCodeDialog.ask(owner, msg, name, code, verified);
+    }
+
+    @Override
+    public boolean confirmClearChat(String name) {
+        Object[] options = {msg.get("dialog.clear-chat.clear"), msg.get("dialog.cancel")};
+        return JOptionPane.showOptionDialog(this, plain(msg.format("dialog.clear-chat.text", name)),
+                msg.get("dialog.clear-chat.title"), JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE, null,
+                options, options[1]) == 0;
+    }
+
+    @Override
+    public Optional<Integer> chooseContact(String name, List<String> contacts) {
+        List<String> choices = new ArrayList<>();
+        choices.add(msg.format("dialog.contact.new", name));
+        choices.addAll(contacts);
+        javax.swing.JComboBox<String> box = new javax.swing.JComboBox<>(choices.toArray(String[]::new));
+        box.setName("dialog.contact.choice");
+        // A contact of the same name is most likely the one.
+        int same = contacts.indexOf(name);
+        box.setSelectedIndex(same >= 0 ? same + 1 : 0);
+        Object[] content = {plain(msg.format("dialog.contact.text", name)), box};
+        int answer = JOptionPane.showConfirmDialog(this, content, msg.get("dialog.contact.title"),
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE);
+        return answer == JOptionPane.OK_OPTION ? Optional.of(box.getSelectedIndex() - 1) : Optional.empty();
+    }
+
+    @Override
+    public void showInfo(String message) {
+        JOptionPane.showMessageDialog(isShowing() ? this : null, plain(message), msg.get("dialog.info.title"),
+                JOptionPane.INFORMATION_MESSAGE);
     }
 
     @Override

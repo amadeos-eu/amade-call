@@ -4,7 +4,9 @@ import eu.amadeos.apps.call.domain.CallKind;
 import eu.amadeos.apps.call.domain.ChatLine;
 import eu.amadeos.apps.call.ui.main.MainPresenter;
 import eu.amadeos.commons.i18n.Messages;
+import eu.amadeos.apps.call.ui.CallGlyph;
 import eu.amadeos.commons.i18n.Mnemonics;
+import eu.amadeos.commons.swing.ToolIcon;
 import eu.amadeos.commons.swing.AmadeUI;
 
 import javax.swing.AbstractAction;
@@ -26,6 +28,7 @@ import java.awt.Font;
 import java.awt.GraphicsDevice;
 import java.awt.GraphicsEnvironment;
 import java.awt.Image;
+import java.awt.Insets;
 import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
@@ -34,8 +37,10 @@ import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -59,6 +64,7 @@ public final class CallWindow extends JFrame implements CallView {
     private final JToggleButton chatButton = new JToggleButton();
     private final JButton verify = new JButton();
     private final JButton hangUp = new JButton();
+    private final List<JButton> switchButtons = new ArrayList<>();
     private final JLabel status = new JLabel(" ");
     private final Timer clock;
     private Instant since;
@@ -67,7 +73,7 @@ public final class CallWindow extends JFrame implements CallView {
     private JFrame fullScreen;
 
     public CallWindow(Messages msg, MainPresenter presenter, String name, CallKind kind, boolean verified, Image icon) {
-        super(msg.format(kind.video() ? "call.title.video" : "call.title.audio", name));
+        super(msg.format("call.title." + kind.name().toLowerCase(Locale.ROOT), name));
         this.msg = msg;
         this.presenter = presenter;
         this.kind = kind;
@@ -82,15 +88,20 @@ public final class CallWindow extends JFrame implements CallView {
         picture.setVerified(verified);
         picture.setShowSelf(kind.video(), true);
         chat = new ChatPanel(msg, name, presenter::sendChat);
-        chat.setVisible(false);
+        chat.setVisible(!kind.media());
 
         pictureHolder.setBorder(AmadeUI.sunken());
         pictureHolder.add(picture);
         JPanel centre = new JPanel(new BorderLayout(0, 4));
         centre.setBorder(BorderFactory.createEmptyBorder(4, 4, 0, 4));
         JPanel top = new JPanel(new BorderLayout());
-        top.add(pictureHolder, BorderLayout.CENTER);
-        top.add(chat, BorderLayout.EAST);
+        if (kind.media()) {
+            top.add(pictureHolder, BorderLayout.CENTER);
+            top.add(chat, BorderLayout.EAST);
+        } else {
+            // A chat: the conversation fills the window.
+            top.add(chat, BorderLayout.CENTER);
+        }
         centre.add(top, BorderLayout.CENTER);
         centre.add(controls(), BorderLayout.SOUTH);
 
@@ -120,9 +131,10 @@ public final class CallWindow extends JFrame implements CallView {
             }
         });
         clock = new Timer(1000, e -> tick());
-        status.setText(msg.get(kind.video() ? "call.status.video" : "call.status.audio"));
+        status.setText(msg.get("call.status." + kind.name().toLowerCase(Locale.ROOT)));
         float scale = AmadeUI.fontScale();
-        setSize(Math.round((kind.video() ? 840 : 520) * scale), Math.round((kind.video() ? 600 : 420) * scale));
+        setSize(Math.round((kind.video() ? 840 : kind.media() ? 520 : 460) * scale),
+                Math.round((kind.video() ? 600 : kind.media() ? 420 : 480) * scale));
         setMinimumSize(new Dimension(420, 320));
     }
 
@@ -134,28 +146,41 @@ public final class CallWindow extends JFrame implements CallView {
         JPanel bar = new JPanel(new BorderLayout());
         bar.setName("call.controls");
         bar.setBorder(BorderFactory.createCompoundBorder(AmadeUI.raised(), BorderFactory.createEmptyBorder(5, 8, 5, 8)));
-        toggle(microphone, "call.microphone", presenter::toggleMicrophone);
-        toggle(camera, "call.camera", presenter::toggleCamera);
-        toggle(screen, "call.screen", presenter::toggleScreen);
-        toggle(chatButton, "call.chat", this::toggleChat);
-        Mnemonics.apply(verify, msg.get("call.verify"));
+        toggle(microphone, "call.microphone", CallGlyph.MICROPHONE, presenter::toggleMicrophone);
+        toggle(camera, "call.camera", CallGlyph.CAMERA, presenter::toggleCamera);
+        toggle(screen, "call.screen", CallGlyph.SCREEN, presenter::toggleScreen);
+        toggle(chatButton, "call.chat", CallGlyph.CHAT, this::toggleChat);
+        CallGlyph.VERIFY.on(verify, msg.get("call.verify"), msg.get("call.verify.tip"));
         verify.setName("call.verify");
-        verify.setToolTipText(msg.get("call.verify.tip"));
         verify.addActionListener(e -> presenter.verifyCall());
         JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
-        left.add(microphone);
-        if (kind.video()) {
-            left.add(camera);
-            left.add(screen);
+        if (kind.media()) {
+            left.add(microphone);
+            if (kind.video()) {
+                left.add(camera);
+                left.add(screen);
+            }
+            left.add(chatButton);
+        } else {
+            // From a chat to a call with the same person; the chat so far moves into the call window.
+            for (CallKind k : List.of(CallKind.VIDEO, CallKind.AUDIO)) {
+                String key = "call.switch." + k.name().toLowerCase(Locale.ROOT);
+                JButton b = (k.video() ? CallGlyph.CAMERA : CallGlyph.AUDIO_CALL)
+                        .on(new JButton(), msg.get(key), msg.get(key + ".tip"));
+                b.setName(key);
+                b.addActionListener(e -> presenter.switchCall(k));
+                b.setFocusable(false);
+                switchButtons.add(b);
+                left.add(b);
+            }
         }
-        left.add(chatButton);
         left.add(verify);
         bar.add(left, BorderLayout.WEST);
-        Mnemonics.apply(hangUp, msg.get("call.hang-up"));
+        CallGlyph.HANG_UP.on(hangUp, msg.get(kind.media() ? "call.hang-up" : "call.end-chat"), null);
         hangUp.setName("call.hang-up");
         hangUp.setBackground(new Color(0xc62828));
         hangUp.setForeground(Color.WHITE);
-        hangUp.setFont(hangUp.getFont().deriveFont(Font.BOLD));
+        hangUp.setMargin(new Insets(4, 18, 4, 18));
         hangUp.addActionListener(e -> presenter.hangUp());
         JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
         right.add(hangUp);
@@ -164,10 +189,9 @@ public final class CallWindow extends JFrame implements CallView {
         return bar;
     }
 
-    private void toggle(JToggleButton button, String key, Runnable action) {
-        Mnemonics.apply(button, msg.get(key));
+    private void toggle(JToggleButton button, String key, CallGlyph glyph, Runnable action) {
+        glyph.on(button, msg.get(key), msg.get(key + ".tip"));
         button.setName(key);
-        button.setToolTipText(msg.get(key + ".tip"));
         button.addActionListener(e -> {
             if (!updating) action.run();
         });
@@ -286,13 +310,23 @@ public final class CallWindow extends JFrame implements CallView {
             screen.setSelected(sharing);
             camera.setEnabled(video && !ended);
             screen.setEnabled(video && !ended);
-            microphone.setText(Mnemonics.strip(msg.get(mic ? "call.microphone" : "call.microphone.off")));
-            camera.setText(Mnemonics.strip(msg.get(cam ? "call.camera" : "call.camera.off")));
+            switchShows(microphone, mic ? CallGlyph.MICROPHONE : CallGlyph.MICROPHONE_OFF,
+                    mic ? "call.microphone" : "call.microphone.off", "call.microphone.tip");
+            switchShows(camera, cam ? CallGlyph.CAMERA : CallGlyph.CAMERA_OFF,
+                    cam ? "call.camera" : "call.camera.off", "call.camera.tip");
             picture.setShowSelf(video && (cam || sharing), !sharing);
-            status.setText(msg.get(sharing ? "call.status.sharing" : video ? "call.status.video" : "call.status.audio"));
+            status.setText(msg.get(sharing ? "call.status.sharing" : !kind.media() ? "call.status.chat"
+                    : video ? "call.status.video" : "call.status.audio"));
         } finally {
             updating = false;
         }
+    }
+
+    private void switchShows(JToggleButton button, CallGlyph glyph, String key, String hint) {
+        button.setIcon(new ToolIcon(glyph));
+        String label = Mnemonics.strip(msg.get(key));
+        button.setToolTipText(CallGlyph.tip(label, msg.get(hint)));
+        button.getAccessibleContext().setAccessibleName(label);
     }
 
     @Override
@@ -302,6 +336,11 @@ public final class CallWindow extends JFrame implements CallView {
             chatButton.setSelected(true);
             toggleChat();
         }
+    }
+
+    @Override
+    public void showHistory(List<ChatLine> earlier) {
+        chat.setHistory(earlier);
     }
 
     @Override
@@ -327,6 +366,7 @@ public final class CallWindow extends JFrame implements CallView {
         picture.setShowSelf(false, true);
         picture.setPhase(text);
         for (JComponent c : List.of(microphone, camera, screen, verify, hangUp)) c.setEnabled(false);
+        for (JButton b : switchButtons) b.setEnabled(false);
         Timer t = new Timer(CLOSE_DELAY_MILLIS, e -> {
             if (!chat.isVisible() || chat.lineCount() == 0) dispose();
         });
@@ -343,6 +383,11 @@ public final class CallWindow extends JFrame implements CallView {
 
     VideoPanel picture() {
         return picture;
+    }
+
+    /** The chat as plain text, for tests. */
+    public String chatPanelText() {
+        return chat.text();
     }
 
     ChatPanel chatPanel() {

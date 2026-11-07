@@ -42,6 +42,7 @@ public final class SettingsDialog extends JDialog {
     private final JCheckBox cameraOn = new JCheckBox();
     private final JCheckBox echo = new JCheckBox();
     private final JCheckBox waitAfterLogin = new JCheckBox();
+    private final JCheckBox keepChats = new JCheckBox();
     private final JSpinner port = new JSpinner(new SpinnerNumberModel(Endpoint.DEFAULT_PORT, 1024, 65535, 1));
     private final SettingsModel model;
     private Optional<SettingsModel> result = Optional.empty();
@@ -86,6 +87,13 @@ public final class SettingsDialog extends JDialog {
         waitAfterLogin.setName("settings.wait");
         row = wide(form, row, waitAfterLogin);
         row = wide(form, row, hint(msg.get("settings.wait.hint")));
+        Mnemonics.apply(keepChats, msg.get("settings.keep-chats"));
+        keepChats.setSelected(model.keepChats() && model.chatsAvailable());
+        keepChats.setEnabled(model.chatsAvailable());
+        keepChats.setName("settings.keep-chats");
+        row = wide(form, row, keepChats);
+        row = wide(form, row, hint(msg.get(model.chatsAvailable() ? "settings.keep-chats.hint"
+                : "settings.keep-chats.no-keyring")));
 
         row = section(form, row, msg.get("settings.section.network"));
         port.setValue(model.port());
@@ -133,7 +141,8 @@ public final class SettingsDialog extends JDialog {
         return new SettingsModel(name.getText().strip(), chosen(camera), chosen(microphone), chosen(speaker),
                 cameraOn.isSelected(), echo.isSelected() || (!model.echoAvailable() && model.echoCancellation()),
                 model.echoAvailable(), ((Number) port.getValue()).intValue(), waitAfterLogin.isSelected(),
-                model.ownKey(), model.cameras(), model.microphones(), model.speakers());
+                model.ownKey(), keepChats.isSelected() || (!model.chatsAvailable() && model.keepChats()),
+                model.chatsAvailable(), model.cameras(), model.microphones(), model.speakers());
     }
 
     public Optional<SettingsModel> result() {

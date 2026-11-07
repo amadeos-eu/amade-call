@@ -4,6 +4,7 @@ import eu.amadeos.apps.call.domain.ChatLine;
 
 import java.awt.image.BufferedImage;
 import java.time.Instant;
+import java.util.List;
 
 /** The window of one call as the presenter sees it. All methods run on the EDT. */
 public interface CallView {
@@ -28,6 +29,9 @@ public interface CallView {
     void showSwitches(boolean microphone, boolean camera, boolean sharing, boolean video);
 
     void showChat(ChatLine line);
+
+    /** The kept chat with this person from earlier calls, shown above the lines of this call. */
+    void showHistory(List<ChatLine> earlier);
 
     void showVerified(boolean verified);
 

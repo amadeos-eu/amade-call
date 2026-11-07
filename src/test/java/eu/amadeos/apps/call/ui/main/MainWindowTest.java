@@ -114,7 +114,7 @@ class MainWindowTest {
         until("Ben active", () -> ben.lastWindow().active);
         ben.on(() -> ben.presenter.sendChat("Hallo Anna"));
         until("chat shown", () -> onEdt(() -> this.<Component>find(call, "chat").isShowing()
-                && this.<javax.swing.text.JTextComponent>find(call, "chat.lines").getText().contains("Hallo Anna")));
+                && call.chatPanelText().contains("Hallo Anna")));
         OnEdt.run(() -> {
             JTextField input = find(call, "chat.input");
             input.setText("Hallo Ben");

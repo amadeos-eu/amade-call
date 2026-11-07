@@ -42,10 +42,13 @@ class TranslationTest {
     void mnemonicsAreUnique() {
         Map<String, List<String>> groups = Map.of(
                 "bar", List.of("menu.call", "menu.person", "menu.options", "menu.help"),
-                "call", List.of("menu.call.video", "menu.call.audio", "menu.call.address", "menu.call.settings",
-                        "menu.call.exit"),
-                "person", List.of("menu.person.verify", "menu.person.forget"),
-                "details", List.of("people.search", "details.video", "details.audio", "details.verify"),
+                "call", List.of("menu.call.video", "menu.call.audio", "menu.call.chat", "menu.call.address",
+                        "menu.call.settings", "menu.call.exit"),
+                "person", List.of("menu.person.verify", "menu.person.add-contact", "menu.person.clear-chat",
+                        "menu.person.forget"),
+                "details", List.of("people.search", "details.video", "details.audio", "details.chat",
+                        "details.verify"),
+                "chat-window", List.of("call.switch.video", "call.switch.audio", "call.verify", "call.end-chat"),
                 "call-window", List.of("call.microphone", "call.camera", "call.screen", "call.chat", "call.verify",
                         "call.hang-up"),
                 "call-window-off", List.of("call.microphone.off", "call.camera.off", "call.screen", "call.chat",
@@ -53,7 +56,8 @@ class TranslationTest {
                 "incoming", List.of("incoming.accept", "incoming.audio-only", "incoming.decline"),
                 "safety", List.of("safety.match", "safety.different", "safety.later"),
                 "settings", List.of("settings.name", "settings.camera", "settings.microphone", "settings.speaker",
-                        "settings.camera-on", "settings.echo", "settings.wait", "settings.port"));
+                        "settings.camera-on", "settings.echo", "settings.wait", "settings.keep-chats",
+                        "settings.port"));
         for (Language language : Language.values()) {
             Messages texts = texts(language);
             for (Map.Entry<String, List<String>> group : groups.entrySet()) {

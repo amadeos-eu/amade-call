@@ -45,6 +45,14 @@ public interface MainView {
     /** Opens the window of a call. */
     CallView openCall(String name, CallKind kind, boolean verified);
 
+    /** Asks before the kept chat with {@code name} is deleted. */
+    boolean confirmClearChat(String name);
+
+    /** Which contact gets the link of {@code name}: -1 for a new contact, else the index in {@code contacts}. */
+    Optional<Integer> chooseContact(String name, List<String> contacts);
+
+    void showInfo(String message);
+
     /** The window of a ringing call. */
     IncomingView showIncoming(String name, CallKind kind, boolean known, boolean verified);
 
