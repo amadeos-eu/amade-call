@@ -263,13 +263,17 @@ public final class MainWindow extends JFrame implements MainView {
         JButton video = button("details.video", () -> presenter.callSelected(CallKind.VIDEO));
         video.setFont(video.getFont().deriveFont(Font.BOLD));
         JButton audio = button("details.audio", () -> presenter.callSelected(CallKind.AUDIO));
+        JButton chat = button("details.chat", () -> presenter.callSelected(CallKind.CHAT));
         JButton verify = button("details.verify", presenter::verifySelected);
         boolean callable = person.callable() && !inCall;
         video.setEnabled(callable);
         audio.setEnabled(callable);
+        chat.setEnabled(callable);
         buttons.add(video);
         buttons.add(Box.createHorizontalStrut(8));
         buttons.add(audio);
+        buttons.add(Box.createHorizontalStrut(8));
+        buttons.add(chat);
         buttons.add(Box.createHorizontalStrut(8));
         buttons.add(verify);
         p.add(left(buttons));
@@ -290,7 +294,7 @@ public final class MainWindow extends JFrame implements MainView {
             };
             String text = arrow + "  " + time + "   " + switch (r.direction()) {
                 case MISSED -> msg.get("recent.missed");
-                default -> msg.get(r.kind() == CallKind.VIDEO ? "recent.video" : "recent.audio")
+                default -> msg.get("recent." + r.kind().name().toLowerCase(Locale.ROOT))
                         + (r.length().isZero() ? "   " + msg.get("recent.not-answered") : "   " + length(r.length()));
             };
             JLabel line = new JLabel(text);

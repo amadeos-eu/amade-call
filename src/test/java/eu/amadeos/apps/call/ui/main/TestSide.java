@@ -150,6 +150,7 @@ final class TestSide {
         final List<String> missed = new CopyOnWriteArrayList<>();
         volatile Incoming incoming;
         volatile String incomingName;
+        volatile CallKind incomingKind;
         volatile String address = "";
         volatile Verdict verdict = Verdict.LATER;
         volatile SafetyCode lastCode;
@@ -206,6 +207,7 @@ final class TestSide {
         @Override
         public CallView openCall(String who, CallKind kind, boolean verified) {
             Window w = new Window();
+            w.kind = kind;
             windows.add(w);
             return w;
         }
@@ -213,6 +215,7 @@ final class TestSide {
         @Override
         public IncomingView showIncoming(String who, CallKind kind, boolean known, boolean verified) {
             incomingName = who;
+            incomingKind = kind;
             Incoming i = new Incoming();
             incoming = i;
             return i;
@@ -261,6 +264,8 @@ final class TestSide {
             volatile boolean remoteScreen;
             volatile boolean remoteMuted;
             volatile String ended;
+            volatile CallKind kind;
+            volatile boolean closed;
 
             @Override
             public void showPhase(String text) {
@@ -321,6 +326,7 @@ final class TestSide {
 
             @Override
             public void close() {
+                closed = true;
             }
         }
     }

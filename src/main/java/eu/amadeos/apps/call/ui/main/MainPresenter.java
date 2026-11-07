@@ -83,6 +83,17 @@ public class MainPresenter {
     private Call call;
     private CallView callView;
     private IncomingView incomingView;
+    /** The lines of the last chat (text only) with each person, so that a call that follows it carries them on. */
+    private final Map<PeerKey, RecentChat> recentChats = new HashMap<>();
+    /** The kind of call that follows the running chat, once the chat has ended. */
+    private CallKind switchTo;
+
+    /** A chat that ended at {@code ended}, with its window while that is still open. */
+    private record RecentChat(List<ChatLine> lines, Instant ended, CallView window) {
+    }
+
+    /** How long after a chat a call with the same person still carries its lines. */
+    static final Duration CHAT_CARRIES_OVER = Duration.ofMinutes(2);
 
     public MainPresenter(MainView view, Messages msg, LocaleSettings locales, Services services) {
         this.view = view;
@@ -256,6 +267,7 @@ public class MainPresenter {
         events.call = call;
         listeners.put(call, events);
         callView = window;
+        expected.ifPresent(k -> carryChat(k, window));
         window.showPhase(msg.format("phase.dialing", name));
         window.showSwitches(true, call.cameraOn(), false, kind.video());
         s.ringer().start(Ringer.Tone.RINGBACK);
@@ -286,6 +298,8 @@ public class MainPresenter {
         incomingView = null;
         boolean verified = c.peer().map(s.known()::verified).orElse(false);
         callView = view.openCall(c.peerName(), c.kind(), verified);
+        CallView opened = callView;
+        c.peer().ifPresent(k -> carryChat(k, opened));
         callView.showPhase(msg.get("phase.connecting"));
         callView.showRemoteCamera(c.remoteCameraOn());
         callView.showSwitches(true, c.kind().video() && withCamera, false, c.kind().video());
@@ -383,6 +397,8 @@ public class MainPresenter {
     private final class CallEvents implements Call.Listener {
         Call call;
         CallView window;
+        /** Every chat line of this call, mine and theirs. */
+        final List<ChatLine> lines = new ArrayList<>();
         private final AtomicReference<BufferedImage> remote = new AtomicReference<>();
         private final AtomicReference<BufferedImage> local = new AtomicReference<>();
         private final AtomicBoolean remoteQueued = new AtomicBoolean();
@@ -442,6 +458,7 @@ public class MainPresenter {
         @Override
         public void chat(ChatLine line) {
             s.ui().execute(() -> {
+                lines.add(line);
                 if (window != null) window.showChat(line);
             });
         }
@@ -486,7 +503,11 @@ public class MainPresenter {
 
     private void callEnded(Call c, EndReason reason, CallView window) {
         s.ringer().stop();
-        listeners.remove(c);
+        CallEvents events = listeners.remove(c);
+        if (events != null && !c.kind().media() && !events.lines.isEmpty()) {
+            c.peer().ifPresent(k -> recentChats.put(k, new RecentChat(List.copyOf(events.lines), s.clock().get(),
+                    window)));
+        }
         if (c == call && incomingView != null) {
             incomingView.close();
             incomingView = null;
@@ -500,6 +521,30 @@ public class MainPresenter {
         }
         if (c == call) call = null;
         refreshPeople();
+        CallKind next = switchTo;
+        switchTo = null;
+        if (next != null && !c.kind().media() && call == null) {
+            c.peer().flatMap(k -> s.known().get(k)).filter(Person::callable).ifPresent(p -> call(p, next));
+        }
+    }
+
+    /**
+     * From the running chat to a video or sound call with the same person: the chat ends, the call starts, and
+     * the call window shows the chat so far.
+     */
+    public void switchCall(CallKind kind) {
+        if (call == null || !call.live() || call.kind().media() || !kind.media()) return;
+        switchTo = kind;
+        call.hangUp();
+    }
+
+    /** A new call with {@code peer}: the lines of a chat that just ended move into its window. */
+    private void carryChat(PeerKey peer, CallView window) {
+        RecentChat recent = recentChats.remove(peer);
+        if (recent == null || recent.ended().plus(CHAT_CARRIES_OVER).isBefore(s.clock().get())) return;
+        if (recent.window() != null) recent.window().close();
+        listenerOf(call).ifPresent(e -> e.lines.addAll(recent.lines()));
+        for (ChatLine line : recent.lines()) window.showChat(line);
     }
 
     /** Keeps the call in the list of recent calls and the person in the list of people. */

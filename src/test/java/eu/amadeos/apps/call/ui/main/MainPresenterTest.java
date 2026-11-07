@@ -89,6 +89,52 @@ class MainPresenterTest {
     }
 
     @Test
+    void aChatHasTextButNoPictureOrSound() throws Exception {
+        Calling c = annaCallsBen(CallKind.CHAT);
+        assertEquals(CallKind.CHAT, ben.view.incomingKind);
+        ben.on(() -> ben.presenter.accept(true));
+        until("both open", () -> c.annaWindow.active && ben.lastWindow().active);
+        assertEquals(CallKind.CHAT, ben.lastWindow().kind);
+        assertTrue(anna.media.sessions.isEmpty() && ben.media.sessions.isEmpty(), "no media for a chat");
+        anna.on(() -> anna.presenter.sendChat("Zeit für einen Anruf?"));
+        until("Ben reads it", () -> ben.lastWindow().chat.size() == 1);
+        ben.on(() -> ben.presenter.hangUp());
+        until("logged", () -> anna.log.all().size() == 1 && ben.log.all().size() == 1);
+        assertEquals(CallKind.CHAT, anna.log.all().getFirst().kind());
+    }
+
+    @Test
+    void fromAChatToAVideoCallTheLinesMoveAlong() throws Exception {
+        Calling c = annaCallsBen(CallKind.CHAT);
+        ben.on(() -> ben.presenter.accept(true));
+        TestSide.FakeView.Window benChat = ben.lastWindow();
+        until("both open", () -> c.annaWindow.active && benChat.active);
+        anna.on(() -> anna.presenter.sendChat("Zeit für einen Anruf?"));
+        until("Ben reads it", () -> benChat.chat.size() == 1);
+        ben.on(() -> ben.presenter.sendChat("Ja, gern"));
+        until("Anna reads it", () -> c.annaWindow.chat.size() == 2);
+        ben.view.incoming = null;
+
+        anna.on(() -> anna.presenter.switchCall(CallKind.VIDEO));
+        until("Ben rings again", () -> ben.view.incoming != null);
+        assertEquals(CallKind.VIDEO, ben.view.incomingKind);
+        TestSide.FakeView.Window annaCall = anna.lastWindow();
+        assertEquals(CallKind.VIDEO, annaCall.kind);
+        assertTrue(c.annaWindow.closed, "Anna's chat window makes way for the call");
+        assertEquals(List.of("Zeit für einen Anruf?", "Ja, gern"),
+                annaCall.chat.stream().map(l -> l.text()).toList());
+
+        ben.on(() -> ben.presenter.accept(true));
+        TestSide.FakeView.Window benCall = ben.lastWindow();
+        until("both active", () -> annaCall.active && benCall.active);
+        assertTrue(benChat.closed, "Ben's chat window makes way for the call");
+        assertEquals(List.of("Zeit für einen Anruf?", "Ja, gern"),
+                benCall.chat.stream().map(l -> l.text()).toList());
+        assertTrue(benCall.chat.get(1).mine());
+        until("pictures", () -> annaCall.remoteFrames > 0 && benCall.remoteFrames > 0);
+    }
+
+    @Test
     void aDeclinedCall() throws Exception {
         Calling c = annaCallsBen(CallKind.AUDIO);
         ben.on(() -> ben.presenter.decline());

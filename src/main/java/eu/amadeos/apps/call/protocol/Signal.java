@@ -120,7 +120,11 @@ public record Signal(Type type, Map<String, Object> fields) {
 
     /** The kind of a HELLO; video when the field is missing or unknown. */
     public CallKind kind() {
-        return "audio".equals(text("kind")) ? CallKind.AUDIO : CallKind.VIDEO;
+        return switch (text("kind")) {
+            case "audio" -> CallKind.AUDIO;
+            case "chat" -> CallKind.CHAT;
+            default -> CallKind.VIDEO;
+        };
     }
 
     // ---------------------------------------------------------------- wire format

@@ -39,6 +39,7 @@ public final class MainMenuBar extends JMenuBar {
         call.add(item("menu.call.video", key(KeyEvent.VK_ENTER, CTRL), () -> presenter.callSelected(CallKind.VIDEO)));
         call.add(item("menu.call.audio", key(KeyEvent.VK_ENTER, CTRL | InputEvent.SHIFT_DOWN_MASK),
                 () -> presenter.callSelected(CallKind.AUDIO)));
+        call.add(item("menu.call.chat", key(KeyEvent.VK_T, CTRL), () -> presenter.callSelected(CallKind.CHAT)));
         call.add(item("menu.call.address", key(KeyEvent.VK_L, CTRL), () -> presenter.callAddress(CallKind.VIDEO)));
         call.addSeparator();
         call.add(item("menu.call.settings", key(KeyEvent.VK_COMMA, CTRL), presenter::openSettings));
@@ -62,6 +63,7 @@ public final class MainMenuBar extends JMenuBar {
     void showPerson(boolean callable, boolean chosen, boolean inCall) {
         items.get("menu.call.video").setEnabled(callable);
         items.get("menu.call.audio").setEnabled(callable);
+        items.get("menu.call.chat").setEnabled(callable);
         items.get("menu.call.address").setEnabled(!inCall);
         items.get("menu.person.verify").setEnabled(chosen);
         items.get("menu.person.forget").setEnabled(chosen && !inCall);

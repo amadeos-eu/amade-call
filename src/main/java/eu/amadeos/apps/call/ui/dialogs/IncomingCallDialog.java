@@ -24,6 +24,7 @@ import java.awt.Image;
 import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.util.Locale;
 
 /**
  * A call rings: a small window of its own, above the others, with the caller's name and avatar and Accept,
@@ -56,7 +57,7 @@ public final class IncomingCallDialog extends JFrame implements IncomingView {
         who.setName("incoming.name");
         who.setFont(who.getFont().deriveFont(Font.BOLD, who.getFont().getSize2D() * 1.5f));
         p.add(centre(who));
-        p.add(centre(new JLabel(msg.get(kind.video() ? "incoming.video" : "incoming.audio"))));
+        p.add(centre(new JLabel(msg.get("incoming." + kind.name().toLowerCase(Locale.ROOT)))));
         JLabel trust = new JLabel(msg.get(verified ? "incoming.verified" : known ? "incoming.known" : "incoming.unknown"));
         trust.setIcon(new LockIcon(verified ? LockIcon.VERIFIED : LockIcon.OPEN));
         if (verified) trust.setForeground(LockIcon.VERIFIED);
