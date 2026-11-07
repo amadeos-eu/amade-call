@@ -390,6 +390,28 @@ public final class MainWindow extends JFrame implements MainView {
     }
 
     @Override
+    public Optional<Integer> chooseContact(String name, List<String> contacts) {
+        List<String> choices = new ArrayList<>();
+        choices.add(msg.format("dialog.contact.new", name));
+        choices.addAll(contacts);
+        javax.swing.JComboBox<String> box = new javax.swing.JComboBox<>(choices.toArray(String[]::new));
+        box.setName("dialog.contact.choice");
+        // A contact of the same name is most likely the one.
+        int same = contacts.indexOf(name);
+        box.setSelectedIndex(same >= 0 ? same + 1 : 0);
+        Object[] content = {plain(msg.format("dialog.contact.text", name)), box};
+        int answer = JOptionPane.showConfirmDialog(this, content, msg.get("dialog.contact.title"),
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE);
+        return answer == JOptionPane.OK_OPTION ? Optional.of(box.getSelectedIndex() - 1) : Optional.empty();
+    }
+
+    @Override
+    public void showInfo(String message) {
+        JOptionPane.showMessageDialog(isShowing() ? this : null, plain(message), msg.get("dialog.info.title"),
+                JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    @Override
     public boolean confirmForget(String name) {
         Object[] options = {msg.get("dialog.forget.forget"), msg.get("dialog.cancel")};
         return JOptionPane.showOptionDialog(this, plain(msg.format("dialog.forget.text", name)),

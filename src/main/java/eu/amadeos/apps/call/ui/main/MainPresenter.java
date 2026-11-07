@@ -1,6 +1,7 @@
 package eu.amadeos.apps.call.ui.main;
 
 import eu.amadeos.apps.call.domain.CallKind;
+import eu.amadeos.apps.call.domain.CallLink;
 import eu.amadeos.apps.call.domain.CallRecord;
 import eu.amadeos.apps.call.domain.ChatLine;
 import eu.amadeos.apps.call.domain.EndReason;
@@ -12,6 +13,7 @@ import eu.amadeos.apps.call.media.Devices;
 import eu.amadeos.apps.call.media.MediaFactory;
 import eu.amadeos.apps.call.media.MediaSettings;
 import eu.amadeos.apps.call.media.Sources;
+import eu.amadeos.apps.call.repository.AddressBook;
 import eu.amadeos.apps.call.repository.CallLog;
 import eu.amadeos.apps.call.repository.CallPreferences;
 import eu.amadeos.apps.call.repository.ChatHistory;
@@ -66,7 +68,8 @@ public class MainPresenter {
 
     /** What the presenter works with. */
     public record Services(Phone phone, MediaFactory media, Devices devices, KnownPeers known, CallLog log,
-                           CallPreferences preferences, ChatHistory chats, Autostart autostart, Ringer ringer,
+                           CallPreferences preferences, ChatHistory chats, AddressBook contacts,
+                           Autostart autostart, Ringer ringer,
                            Sources sources,
                            ExecutorService background, Executor ui, Supplier<Instant> clock, Runnable exit) {
     }
@@ -79,6 +82,8 @@ public class MainPresenter {
     private Optional<PeerKey> selected = Optional.empty();
     private boolean discovery = true;
     private boolean started;
+    /** A link that came before the call port was open. */
+    private CallLink pendingLink;
     /** This computer's name and addresses in the network, for the status line. */
     private String ownAddress = "";
     private String lastAddress = "";
@@ -120,6 +125,11 @@ public class MainPresenter {
                     ownAddress = address;
                     started = true;
                     showStatus();
+                    if (pendingLink != null) {
+                        CallLink link = pendingLink;
+                        pendingLink = null;
+                        open(link);
+                    }
                 });
             } catch (IOException | RuntimeException e) {
                 LOG.error("amade-call could not start", e);
@@ -146,8 +156,64 @@ public class MainPresenter {
     }
 
     /** From a second start of the program: show the window. */
+    /** A wish from a second start: show the window, and maybe call ({@code call amadeos-call:...}). */
     public void message(String text) {
-        s.ui().execute(view::bringToFront);
+        s.ui().execute(() -> {
+            view.bringToFront();
+            if (text.startsWith("call ")) CallLink.parse(text.substring(5)).ifPresent(this::open);
+        });
+    }
+
+    /** Calls the person of a link, for example from Contacts; waits for the start when it comes early. */
+    public void open(CallLink link) {
+        if (!started) {
+            pendingLink = link;
+            return;
+        }
+        Optional<Person> person = people().stream().filter(p -> p.key().equals(link.key())).findFirst();
+        if (person.isEmpty()) {
+            view.showError(msg.get("error.link.unknown"));
+            return;
+        }
+        select(link.key());
+        call(person.get(), link.kind());
+    }
+
+    /** Person → Add to Contacts: the link into a contact of the address book, or a new contact. */
+    public void addToContacts() {
+        Optional<Person> person = selectedPerson();
+        if (person.isEmpty()) return;
+        Person p = person.get();
+        s.background().execute(() -> {
+            List<AddressBook.Entry> all = s.contacts().contacts();
+            s.ui().execute(() -> {
+                Optional<AddressBook.Entry> linked = all.stream().filter(e -> e.links(p.key())).findFirst();
+                if (linked.isPresent()) {
+                    view.showInfo(msg.format("info.contact.already", p.name(), linked.get().name()));
+                    return;
+                }
+                List<String> names = all.stream().map(AddressBook.Entry::name).toList();
+                Optional<Integer> choice = view.chooseContact(p.name(), names);
+                if (choice.isEmpty()) return;
+                int i = choice.get();
+                s.background().execute(() -> {
+                    try {
+                        String target;
+                        if (i < 0) {
+                            s.contacts().create(p.name(), p.key(), s.clock().get());
+                            target = p.name();
+                        } else {
+                            s.contacts().link(all.get(i).file(), p.key());
+                            target = all.get(i).name();
+                        }
+                        s.ui().execute(() -> view.showInfo(msg.format("info.contact.added", p.name(), target)));
+                    } catch (IOException | RuntimeException e) {
+                        LOG.warn("No contact for {}", p.name(), e);
+                        s.ui().execute(() -> view.showError(msg.format("error.contact", e.getMessage())));
+                    }
+                });
+            });
+        });
     }
 
     // ---------------------------------------------------------------- the list of people

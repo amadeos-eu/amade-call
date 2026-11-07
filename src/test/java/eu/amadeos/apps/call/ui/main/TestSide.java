@@ -9,6 +9,7 @@ import eu.amadeos.apps.call.domain.SafetyCode;
 import eu.amadeos.apps.call.media.Devices;
 import eu.amadeos.apps.call.media.FakeMedia;
 import eu.amadeos.apps.call.media.Sources;
+import eu.amadeos.apps.call.repository.AddressBook;
 import eu.amadeos.apps.call.repository.CallLog;
 import eu.amadeos.apps.call.repository.ChatHistory;
 import eu.amadeos.apps.call.repository.CallPreferences;
@@ -91,7 +92,7 @@ final class TestSide {
             }
         };
         presenter = new MainPresenter(window == null ? view : window, MSG, null, new MainPresenter.Services(phone,
-                used, devices, known, log, preferences, chats, autostart, ringer, sources, background,
+                used, devices, known, log, preferences, chats, new AddressBook(home.resolve("contacts")), autostart, ringer, sources, background,
                 ui == null ? edt : ui, Instant::now,
                 () -> exited.set(true)));
     }
@@ -159,6 +160,9 @@ final class TestSide {
         volatile Verdict verdict = Verdict.LATER;
         volatile SafetyCode lastCode;
         volatile boolean forget;
+        volatile Optional<Integer> contactChoice = Optional.of(-1);
+        volatile List<String> contactChoices = List.of();
+        final List<String> infos = new CopyOnWriteArrayList<>();
         volatile SettingsModel settings;
         volatile boolean hidden;
         volatile boolean closed;
@@ -201,6 +205,17 @@ final class TestSide {
         public Verdict askSafetyCode(String who, SafetyCode code, boolean verified) {
             lastCode = code;
             return verdict;
+        }
+
+        @Override
+        public Optional<Integer> chooseContact(String who, List<String> contacts) {
+            contactChoices = List.copyOf(contacts);
+            return contactChoice;
+        }
+
+        @Override
+        public void showInfo(String message) {
+            infos.add(message);
         }
 
         @Override

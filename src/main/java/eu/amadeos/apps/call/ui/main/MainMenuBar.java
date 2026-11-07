@@ -48,6 +48,7 @@ public final class MainMenuBar extends JMenuBar {
 
         JMenu person = menu("menu.person");
         person.add(item("menu.person.verify", null, presenter::verifySelected));
+        person.add(item("menu.person.add-contact", null, presenter::addToContacts));
         person.add(item("menu.person.clear-chat", null, presenter::clearChatSelected));
         person.add(item("menu.person.forget", null, presenter::forgetSelected));
 
@@ -69,6 +70,7 @@ public final class MainMenuBar extends JMenuBar {
         items.get("menu.person.verify").setEnabled(chosen);
         items.get("menu.person.forget").setEnabled(chosen && !inCall);
         items.get("menu.person.clear-chat").setEnabled(chosen && !inCall);
+        items.get("menu.person.add-contact").setEnabled(chosen);
     }
 
     JMenuItem item(String name) {

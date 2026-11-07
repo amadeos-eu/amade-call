@@ -168,6 +168,25 @@ class MainPresenterTest {
     }
 
     @Test
+    void aLinkFromContactsCallsAndThePersonGoesIntoContacts() throws Exception {
+        anna.known.remember(ben.phone.self(), "Ben", Optional.of(new eu.amadeos.apps.call.domain.Endpoint("127.0.0.1", ben.phone.port())));
+        anna.on(() -> anna.presenter.select(ben.phone.self()));
+        anna.on(() -> anna.presenter.addToContacts());
+        until("added", () -> anna.view.infos.size() == 1);
+        eu.amadeos.apps.call.repository.AddressBook book = new eu.amadeos.apps.call.repository.AddressBook(
+                dir.resolve("anna").resolve("contacts"));
+        assertTrue(book.contacts().getFirst().links(ben.phone.self()));
+        anna.on(() -> anna.presenter.addToContacts());
+        until("already there", () -> anna.view.infos.size() == 2);
+        assertEquals(MSG.format("info.contact.already", "Ben", "Ben"), anna.view.infos.getLast());
+
+        anna.on(() -> anna.presenter.message("call amadeos-call:" + ben.phone.self().hex() + "?kind=chat"));
+        until("Ben asked to chat", () -> ben.view.incoming != null);
+        assertEquals(CallKind.CHAT, ben.view.incomingKind);
+        assertEquals(CallKind.CHAT, anna.lastWindow().kind);
+    }
+
+    @Test
     void aDeclinedCall() throws Exception {
         Calling c = annaCallsBen(CallKind.AUDIO);
         ben.on(() -> ben.presenter.decline());

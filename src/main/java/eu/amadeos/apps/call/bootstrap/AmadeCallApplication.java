@@ -1,5 +1,6 @@
 package eu.amadeos.apps.call.bootstrap;
 
+import eu.amadeos.apps.call.domain.CallLink;
 import eu.amadeos.apps.call.media.Sources;
 import eu.amadeos.apps.call.service.Autostart;
 import eu.amadeos.apps.call.service.SingleInstance;
@@ -41,7 +42,10 @@ public final class AmadeCallApplication {
         boolean background = Arrays.asList(args).contains(Autostart.BACKGROUND);
         // Only one amade-call per user owns the call port: a second start shows the first one's window.
         SingleInstance instance = new SingleInstance(SingleInstance.defaultSocket());
-        if (instance.sendToRunning(background ? "background" : "show")) return;
+        // A link from Contacts (amadeos-call:<key>?kind=video), handed over by xdg-open.
+        Optional<CallLink> link = Arrays.stream(args).map(CallLink::parse).flatMap(Optional::stream).findFirst();
+        String wish = link.map(l -> "call " + l.uri()).orElse(background ? "background" : "show");
+        if (instance.sendToRunning(wish)) return;
         Sources sources = Arrays.stream(args).anyMatch(a -> a.equals(TEST_PICTURE) || a.startsWith(TEST_PICTURE + "="))
                 ? Sources.TEST_PICTURE : Sources.DEVICES;
         Optional<Path> still = Arrays.stream(args).filter(a -> a.startsWith(TEST_PICTURE + "="))
@@ -58,6 +62,7 @@ public final class AmadeCallApplication {
                 LoggerFactory.getLogger(AmadeCallApplication.class).warn("No single-instance socket", e);
             }
             presenter.start();
+            link.ifPresent(presenter::open);
         }, new CallModule(sources, still, instance));
     }
     // --8<-- [end:main]

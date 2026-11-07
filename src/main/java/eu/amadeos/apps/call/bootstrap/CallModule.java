@@ -8,6 +8,7 @@ import eu.amadeos.apps.call.media.Devices;
 import eu.amadeos.apps.call.media.GstMedia;
 import eu.amadeos.apps.call.media.MediaFactory;
 import eu.amadeos.apps.call.media.Sources;
+import eu.amadeos.apps.call.repository.AddressBook;
 import eu.amadeos.apps.call.repository.CallLog;
 import eu.amadeos.apps.call.repository.CallPreferences;
 import eu.amadeos.apps.call.repository.ChatHistory;
@@ -87,7 +88,8 @@ public final class CallModule extends AbstractModule {
         ChatHistory chats = new ChatHistory(xdg.dataHome().resolve("amadeos").resolve("call").resolve("chats"),
                 new ChatKey(() -> new SecretToolPasswordStore("amade-call")));
         return new MainPresenter(window, msg, locales, new MainPresenter.Services(phone, media,
-                new Devices(CommandRunner.system()), known, log, preferences, chats, new Autostart(xdg.configHome()),
+                new Devices(CommandRunner.system()), known, log, preferences, chats,
+                new AddressBook(xdg.dataHome().resolve("amadeos").resolve("contacts")), new Autostart(xdg.configHome()),
                 new Ringer(), sources, background, ui, Instant::now, () -> {
                     instance.close();
                     System.exit(0);
