@@ -184,6 +184,9 @@ class MainPresenterTest {
         until("Ben asked to chat", () -> ben.view.incoming != null);
         assertEquals(CallKind.CHAT, ben.view.incomingKind);
         assertEquals(CallKind.CHAT, anna.lastWindow().kind);
+        // End it, so nothing writes into the temporary folder while it is deleted.
+        ben.on(() -> ben.presenter.decline());
+        until("logged", () -> anna.log.all().size() == 1 && ben.log.all().size() == 1);
     }
 
     @Test
