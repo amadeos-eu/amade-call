@@ -134,6 +134,10 @@ final class TestSide {
         on(presenter::exit);
         edt.shutdownNow();
         background.shutdownNow();
+        // Wait until no task still writes into the home folder (the call log of a call that the other side's exit
+        // ended, a kept chat), or JUnit's @TempDir cleanup races with the write and fails the test.
+        edt.awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS);
+        background.awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS);
     }
 
     static final class RecordingRinger extends Ringer {
