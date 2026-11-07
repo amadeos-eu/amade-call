@@ -1,5 +1,6 @@
 package eu.amadeos.apps.call.repository;
 
+import eu.amadeos.apps.call.domain.ChatFile;
 import eu.amadeos.apps.call.domain.ChatLine;
 import eu.amadeos.apps.call.domain.PeerKey;
 import eu.amadeos.commons.desktop.PasswordStore;
@@ -38,6 +39,24 @@ class ChatHistoryTest {
         assertTrue(h.has(BEN));
         h.delete(BEN);
         assertEquals(List.of(), h.load(BEN));
+    }
+
+    @Test
+    void aPictureComesBackWithWhereItIs() {
+        ChatHistory h = new ChatHistory(dir, () -> Optional.of(KEY));
+        Path where = dir.resolve("Downloads").resolve("amade-call").resolve("floor\tplan.png");
+        ChatLine picture = new ChatLine(false, "floor\tplan.png", Instant.ofEpochMilli(3000),
+                ChatFile.running("x", "floor\tplan.png", 1234).arrived(where));
+        h.add(BEN, List.of(new ChatLine(true, "Look:", Instant.ofEpochMilli(2000)), picture));
+        List<ChatLine> back = h.load(BEN);
+        assertEquals(2, back.size());
+        assertEquals("Look:", back.getFirst().text());
+        ChatFile f = back.get(1).file();
+        assertEquals("floor\tplan.png", f.name());
+        assertEquals(1234, f.size());
+        assertEquals(where, f.path());
+        assertEquals(ChatFile.Status.DONE, f.status());
+        assertTrue(f.picture());
     }
 
     @Test

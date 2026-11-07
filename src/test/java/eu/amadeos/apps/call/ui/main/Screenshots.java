@@ -153,13 +153,46 @@ public final class Screenshots {
         anna.on(() -> anna.presenter.sendChat("Do you have a minute? The plumber can come on Thursday."));
         Thread.sleep(400);
         ben.on(() -> ben.presenter.sendChat("Thursday works. Shall we talk it through?"));
-        Thread.sleep(1500);
+        Thread.sleep(400);
+        Path plan = floorPlan(Files.createTempDirectory("amade-call-plan").resolve("kitchen.png"));
+        ben.on(() -> ben.presenter.sendFiles(java.util.List.of(plan)));
+        Thread.sleep(2500);
         save(frame("call-window"), out.resolve("amade-call-chat.png"));
         anna.on(() -> anna.presenter.hangUp());
         Thread.sleep(500);
 
         anna.shutdown();
         ben.shutdown();
+    }
+
+    /** A drawn floor plan of a kitchen, to send through the chat. */
+    private static Path floorPlan(Path file) throws IOException {
+        java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(480, 320,
+                java.awt.image.BufferedImage.TYPE_INT_RGB);
+        java.awt.Graphics2D g = img.createGraphics();
+        g.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+        g.setColor(new java.awt.Color(0xF4F1E8));
+        g.fillRect(0, 0, 480, 320);
+        g.setColor(new java.awt.Color(0x2F3B4C));
+        g.setStroke(new java.awt.BasicStroke(8));
+        g.drawRect(30, 30, 420, 260);
+        g.drawLine(250, 30, 250, 150);
+        g.setStroke(new java.awt.BasicStroke(3));
+        g.setColor(new java.awt.Color(0x8FB8A8));
+        g.fillRect(40, 40, 200, 40);
+        g.fillRect(40, 80, 40, 120);
+        g.setColor(new java.awt.Color(0xC9A27E));
+        g.fillOval(300, 180, 110, 70);
+        g.setColor(new java.awt.Color(0x2F3B4C));
+        g.drawRect(40, 40, 200, 40);
+        g.drawRect(40, 80, 40, 120);
+        g.drawOval(300, 180, 110, 70);
+        g.setFont(g.getFont().deriveFont(java.awt.Font.BOLD, 20f));
+        g.drawString("Kitchen", 120, 160);
+        g.drawString("Dining", 320, 120);
+        g.dispose();
+        javax.imageio.ImageIO.write(img, "png", file.toFile());
+        return file;
     }
 
     private static Path resource(Path dir, String name) throws IOException {

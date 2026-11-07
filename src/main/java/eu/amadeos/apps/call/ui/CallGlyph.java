@@ -14,7 +14,7 @@ import java.awt.geom.RoundRectangle2D;
 
 /** The icons of the call buttons, drawn like the toolbar icons of the other amadeOS programs. */
 public enum CallGlyph implements ToolIcon.Glyph {
-    MICROPHONE, MICROPHONE_OFF, CAMERA, CAMERA_OFF, SCREEN, CHAT, VERIFY, AUDIO_CALL, HANG_UP, SEND;
+    MICROPHONE, MICROPHONE_OFF, CAMERA, CAMERA_OFF, SCREEN, CHAT, VERIFY, AUDIO_CALL, HANG_UP, SEND, ATTACH;
 
     @Override
     public void paint(ToolIcon.Pen pen) {
@@ -73,6 +73,24 @@ public enum CallGlyph implements ToolIcon.Glyph {
                 pen.g().rotate(Math.toRadians(135), 8, 8);
                 pen.g().translate(0, 1);
                 handset(pen);
+                pen.g().setTransform(before);
+            }
+            case ATTACH -> {
+                // A paper clip, standing at a slant.
+                AffineTransform before = pen.g().getTransform();
+                pen.g().rotate(Math.toRadians(40), 8, 8);
+                pen.bold(1.4f);
+                Path2D clip = new Path2D.Double();
+                clip.moveTo(9.5, 5);
+                clip.lineTo(9.5, 12.5);
+                clip.curveTo(9.5, 15, 6.5, 15, 6.5, 12.5);
+                clip.lineTo(6.5, 3.5);
+                clip.curveTo(6.5, 0.5, 11.5, 0.5, 11.5, 3.5);
+                clip.lineTo(11.5, 12.5);
+                clip.curveTo(11.5, 16.5, 4.5, 16.5, 4.5, 12.5);
+                clip.lineTo(4.5, 5.5);
+                pen.draw(clip);
+                pen.thin();
                 pen.g().setTransform(before);
             }
             case SEND -> {

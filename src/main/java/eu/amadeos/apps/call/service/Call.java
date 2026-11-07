@@ -16,6 +16,7 @@ import org.slf4j.LoggerFactory;
 
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -76,6 +77,14 @@ public final class Call {
         default void remoteCamera(boolean on) {
         }
 
+        /**
+         * Where a picture or file from the other side goes: a free path for this name (already without
+         * folders). Empty refuses it.
+         */
+        default Optional<Path> fileTarget(String name) {
+            return Optional.empty();
+        }
+
         default void remoteScreen(boolean on) {
         }
 
@@ -103,6 +112,7 @@ public final class Call {
     private final Supplier<Instant> clock;
     private final Instant created;
     private final List<Signal> pendingIce = new ArrayList<>();
+    private final ChatFiles files;
     private Listener listener;
     private SignalChannel channel;
     private PeerKey peer;
@@ -131,6 +141,17 @@ public final class Call {
         this.clock = clock;
         this.created = clock.get();
         this.cameraOn = kind.video() && mediaSettings.cameraOn();
+        this.files = new ChatFiles(this::send, clock, new ChatFiles.Target() {
+            @Override
+            public Optional<Path> pathFor(String name) {
+                return listener.fileTarget(name);
+            }
+
+            @Override
+            public void show(ChatLine line) {
+                listener.chat(line);
+            }
+        });
     }
 
     // ---------------------------------------------------------------- outgoing
@@ -295,6 +316,19 @@ public final class Call {
         if (send(Signal.chat(line.text()))) listener.chat(line);
     }
 
+    /** Sends a picture or file into the chat; false when it cannot be read, is too large or the call is not on. */
+    public boolean sendFile(Path file) {
+        synchronized (this) {
+            if (state != State.ACTIVE) return false;
+        }
+        return files.send(file);
+    }
+
+    /** The largest file the chat takes. */
+    public static long maxFileSize() {
+        return ChatFiles.MAX_SIZE;
+    }
+
     private boolean send(Signal signal) {
         SignalChannel ch;
         synchronized (this) {
@@ -354,6 +388,7 @@ public final class Call {
                 s.iceCandidate(signal.number("index"), signal.text("candidate"));
             }
             case CHAT -> listener.chat(new ChatLine(false, signal.text("text"), clock.get()));
+            case FILE, FILE_DATA, FILE_END, FILE_CANCEL -> files.onSignal(signal);
             case CAMERA -> {
                 synchronized (this) {
                     remoteCameraOn = signal.flag("on");
@@ -486,6 +521,7 @@ public final class Call {
             s = session;
             session = null;
         }
+        files.close();
         if (ch != null) {
             if (sayBye) ch.send(Signal.bye());
             ch.close();

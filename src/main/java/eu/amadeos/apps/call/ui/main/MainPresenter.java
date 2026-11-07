@@ -3,6 +3,7 @@ package eu.amadeos.apps.call.ui.main;
 import eu.amadeos.apps.call.domain.CallKind;
 import eu.amadeos.apps.call.domain.CallLink;
 import eu.amadeos.apps.call.domain.CallRecord;
+import eu.amadeos.apps.call.domain.ChatFile;
 import eu.amadeos.apps.call.domain.ChatLine;
 import eu.amadeos.apps.call.domain.EndReason;
 import eu.amadeos.apps.call.domain.Endpoint;
@@ -26,6 +27,7 @@ import eu.amadeos.apps.call.service.Phone;
 import eu.amadeos.apps.call.service.Ringer;
 import eu.amadeos.apps.call.ui.call.CallView;
 import eu.amadeos.apps.call.ui.dialogs.IncomingView;
+import eu.amadeos.commons.desktop.DesktopLauncher;
 import eu.amadeos.commons.i18n.Language;
 import eu.amadeos.commons.i18n.LocaleSettings;
 import eu.amadeos.commons.i18n.Messages;
@@ -34,6 +36,8 @@ import org.slf4j.LoggerFactory;
 
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -69,6 +73,7 @@ public class MainPresenter {
     /** What the presenter works with. */
     public record Services(Phone phone, MediaFactory media, Devices devices, KnownPeers known, CallLog log,
                            CallPreferences preferences, ChatHistory chats, AddressBook contacts,
+                           Path downloads, DesktopLauncher launcher,
                            Autostart autostart, Ringer ringer,
                            Sources sources,
                            ExecutorService background, Executor ui, Supplier<Instant> clock, Runnable exit) {
@@ -89,6 +94,8 @@ public class MainPresenter {
     private String lastAddress = "";
     private Call call;
     private CallView callView;
+    /** Download names handed out in this run, so two files of the same name at once do not collide. */
+    private final java.util.Set<Path> reserved = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private IncomingView incomingView;
     /** The lines of the last chat (text only) with each person, so that a call that follows it carries them on. */
     private final Map<PeerKey, RecentChat> recentChats = new HashMap<>();
@@ -417,6 +424,58 @@ public class MainPresenter {
         if (call != null && call.live()) call.sendChat(text);
     }
 
+    // --8<-- [start:files]
+    /** Sends pictures and files into the chat of the running call; says which could not go. */
+    public void sendFiles(List<Path> files) {
+        Call c = call;
+        CallView w = callView;
+        if (c == null || !c.live() || files.isEmpty()) return;
+        s.background().execute(() -> {
+            for (Path f : files) {
+                if (!c.sendFile(f)) {
+                    String text = msg.format("error.file.send", f.getFileName(),
+                            ChatFile.sizeText(Call.maxFileSize(), msg.locale()));
+                    s.ui().execute(() -> {
+                        if (w != null) w.showInfo(text);
+                    });
+                }
+            }
+        });
+    }
+
+    /**
+     * Opens a picture or file of the chat with its program. A received program or script is not started: its
+     * folder opens instead.
+     */
+    public void openFile(Path file) {
+        Path target = DesktopLauncher.isRisky(file.getFileName().toString()) && file.getParent() != null
+                ? file.getParent() : file;
+        s.background().execute(() -> {
+            try {
+                s.launcher().open(target);
+            } catch (IOException | RuntimeException e) {
+                s.ui().execute(() -> view.showError(msg.format("error.file.open", file.getFileName(), e.getMessage())));
+            }
+        });
+    }
+
+    /** A free name in the downloads folder for a file from the chat: "photo.jpg", else "photo (2).jpg" … */
+    synchronized Optional<Path> downloadPath(String name) {
+        Path dir = s.downloads().resolve("amade-call");
+        int dot = name.lastIndexOf('.');
+        String stem = dot > 0 ? name.substring(0, dot) : name;
+        String ext = dot > 0 ? name.substring(dot) : "";
+        for (int i = 1; i < 10_000; i++) {
+            Path p = dir.resolve(i == 1 ? name : stem + " (" + i + ")" + ext);
+            if (!Files.exists(p) && !Files.exists(p.resolveSibling(p.getFileName() + ".part"))
+                    && reserved.add(p)) {
+                return Optional.of(p);
+            }
+        }
+        return Optional.empty();
+    }
+    // --8<-- [end:files]
+
     public void hangUp() {
         if (call != null && call.live()) call.hangUp();
     }
@@ -539,12 +598,22 @@ public class MainPresenter {
         @Override
         public void chat(ChatLine line) {
             s.ui().execute(() -> {
-                lines.add(line);
+                int same = -1;
+                for (int i = 0; i < lines.size(); i++) if (lines.get(i).sameFile(line)) same = i;
+                if (same >= 0) lines.set(same, line);
+                else lines.add(line);
                 if (window != null) window.showChat(line);
-                if (s.preferences().keepChats()) {
+                // A file is kept once it is there; a failed one is not worth keeping.
+                boolean keep = line.file() == null || line.file().status() == ChatFile.Status.DONE;
+                if (keep && s.preferences().keepChats()) {
                     call.peer().ifPresent(k -> s.background().execute(() -> s.chats().add(k, List.of(line))));
                 }
             });
+        }
+
+        @Override
+        public Optional<Path> fileTarget(String name) {
+            return downloadPath(name);
         }
 
         /** Once the other side is known: the kept chat with them, above the lines of this call. */

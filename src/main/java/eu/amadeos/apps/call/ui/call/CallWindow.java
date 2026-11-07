@@ -87,7 +87,7 @@ public final class CallWindow extends JFrame implements CallView {
                 msg.format("call.remote-screen", name), msg.get("call.self"));
         picture.setVerified(verified);
         picture.setShowSelf(kind.video(), true);
-        chat = new ChatPanel(msg, name, presenter::sendChat);
+        chat = new ChatPanel(msg, name, presenter::sendChat, presenter::sendFiles, presenter::openFile);
         chat.setVisible(!kind.media());
 
         pictureHolder.setBorder(AmadeUI.sunken());
