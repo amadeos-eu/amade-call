@@ -28,7 +28,7 @@ repositories {
 dependencies {
     // Theme, Motif look, start-up, XDG folders and the program runner shared by all amadeOS applications.
     // With ../amade-commons checked out, settings.gradle builds that checkout instead (composite build).
-    implementation 'com.github.amadeos-eu:amade-commons:ae4b76b1a7'
+    implementation 'com.github.amadeos-eu:amade-commons:v1.1.0'
     // GStreamer from Java (JNA): webrtcbin does the calls (ICE, DTLS-SRTP, RTP), the rest of GStreamer the
     // camera, the screen, the microphone, the codecs and the speakers. LGPL-3.0, used as a library.
     implementation 'org.freedesktop.gstreamer:gst1-java-core:1.4.0'
