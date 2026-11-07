@@ -376,6 +376,11 @@ public final class CallWindow extends JFrame implements CallView {
         return picture;
     }
 
+    /** The chat as plain text, for tests. */
+    public String chatPanelText() {
+        return chat.text();
+    }
+
     ChatPanel chatPanel() {
         return chat;
     }
