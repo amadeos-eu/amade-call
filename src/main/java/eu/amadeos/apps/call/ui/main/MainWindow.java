@@ -382,6 +382,14 @@ public final class MainWindow extends JFrame implements MainView {
     }
 
     @Override
+    public boolean confirmClearChat(String name) {
+        Object[] options = {msg.get("dialog.clear-chat.clear"), msg.get("dialog.cancel")};
+        return JOptionPane.showOptionDialog(this, plain(msg.format("dialog.clear-chat.text", name)),
+                msg.get("dialog.clear-chat.title"), JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE, null,
+                options, options[1]) == 0;
+    }
+
+    @Override
     public boolean confirmForget(String name) {
         Object[] options = {msg.get("dialog.forget.forget"), msg.get("dialog.cancel")};
         return JOptionPane.showOptionDialog(this, plain(msg.format("dialog.forget.text", name)),

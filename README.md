@@ -19,6 +19,7 @@
 - **Text chat** without picture and sound (Ctrl+T): the conversation fills the window. *Video Call* and *Audio Call* in the chat window end the chat and call the same person, and the chat so far moves into the call window.
 
   ![Text chat](docs/screenshots/amade-call-chat.png)
+- **Kept chats**: the chat with each person (also the one beside a call) stays on this computer, encrypted with AES-256-GCM in `~/.local/share/amadeos/call/chats/`. The key lies in the login keyring (secret-tool), so the files are unreadable without the login. The next chat or call shows the earlier lines, dimmed and with the date; *Person → Clear Chat History* deletes them, and the setting can turn it off.
 - **Incoming calls** ring in a window of their own, also while the main window is closed: *Accept*, *Sound Only* or *Decline*. A call that was not answered becomes a notification with *Call Back*.
 
   ![Incoming call](docs/screenshots/amade-call-incoming.png)
@@ -65,7 +66,7 @@ Java 25, Swing and Guice; start-up, theme and language come from `AmadeApplicati
 | `protocol` | `Signal` (the messages), `SignalChannel` (length-prefixed JSON frames over TLS), `CallServer`, `Tls` |
 | `media` | `GstMedia` and `GstSession` (the GStreamer pipeline of one call), `Devices` (cameras, microphones, speakers), `MediaSettings` |
 | `service` | `Phone` (key, call port, announcement, one call at a time), `Call` (the states of one call), `AvahiDiscovery`, `IdentityStore`, `Ringer`, `Autostart`, `SingleInstance` |
-| `repository` | `CallPreferences`, `KnownPeers` (`people.properties`), `CallLog` (`calls.tsv`), all in `~/.config/amadeos/call/` |
+| `repository` | `CallPreferences`, `KnownPeers` (`people.properties`), `CallLog` (`calls.tsv`), all in `~/.config/amadeos/call/`; `ChatHistory` and `ChatKey` (encrypted chats, key in the keyring) |
 | `ui.main` | main window, presenter, menus, list of people |
 | `ui.call` | call window, `VideoPanel`, `ChatPanel` |
 | `ui.dialogs` | incoming call, safety code, settings |

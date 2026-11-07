@@ -45,6 +45,9 @@ public interface MainView {
     /** Opens the window of a call. */
     CallView openCall(String name, CallKind kind, boolean verified);
 
+    /** Asks before the kept chat with {@code name} is deleted. */
+    boolean confirmClearChat(String name);
+
     /** The window of a ringing call. */
     IncomingView showIncoming(String name, CallKind kind, boolean known, boolean verified);
 

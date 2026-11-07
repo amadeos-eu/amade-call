@@ -135,6 +135,39 @@ class MainPresenterTest {
     }
 
     @Test
+    void theNextChatShowsTheKeptOne() throws Exception {
+        Calling c = annaCallsBen(CallKind.CHAT);
+        ben.on(() -> ben.presenter.accept(true));
+        until("both open", () -> c.annaWindow.active && ben.lastWindow().active);
+        anna.on(() -> anna.presenter.sendChat("Hallo Ben"));
+        until("Ben reads it", () -> ben.lastWindow().chat.size() == 1);
+        ben.on(() -> ben.presenter.sendChat("Hallo Anna"));
+        until("Anna reads it", () -> c.annaWindow.chat.size() == 2);
+        anna.on(() -> anna.presenter.hangUp());
+        until("ended", () -> c.annaWindow.ended != null && ben.lastWindow().ended != null);
+        until("kept", () -> anna.chats.load(ben.phone.self()).size() == 2 && ben.chats.load(anna.phone.self()).size() == 2);
+        assertFalse(java.nio.file.Files.readString(dir.resolve("anna").resolve("chats")
+                .resolve(ben.phone.self().hex() + ".chat"), java.nio.charset.StandardCharsets.ISO_8859_1)
+                .contains("Hallo"), "the file is encrypted");
+
+        ben.view.incoming = null;
+        Calling again = annaCallsBen(CallKind.AUDIO);
+        ben.on(() -> ben.presenter.accept(true));
+        until("history shown", () -> again.annaWindow.history.size() == 2 && ben.lastWindow().history.size() == 2);
+        assertEquals("Hallo Ben", again.annaWindow.history.getFirst().text());
+        assertTrue(again.annaWindow.history.getFirst().mine());
+        assertFalse(ben.lastWindow().history.getFirst().mine());
+        anna.on(() -> anna.presenter.hangUp());
+        until("ended again", () -> again.annaWindow.ended != null);
+
+        anna.on(() -> anna.presenter.select(ben.phone.self()));
+        anna.view.forget = true;
+        anna.on(() -> anna.presenter.clearChatSelected());
+        until("cleared", () -> anna.chats.load(ben.phone.self()).isEmpty());
+        assertEquals(2, ben.chats.load(anna.phone.self()).size(), "Ben keeps his");
+    }
+
+    @Test
     void aDeclinedCall() throws Exception {
         Calling c = annaCallsBen(CallKind.AUDIO);
         ben.on(() -> ben.presenter.decline());
@@ -208,11 +241,14 @@ class MainPresenterTest {
         assertEquals("Anna", before.name());
         assertEquals(List.of(new Devices.Choice("mic", "Microphone")), before.microphones());
         anna.on(() -> anna.presenter.applySettings(new SettingsModel("Anna B.", Optional.empty(), Optional.of("mic"),
-                Optional.empty(), false, false, false, before.port() + 1, true, "", List.of(), List.of(), List.of())));
+                Optional.empty(), false, false, false, before.port() + 1, true, "", false, true, List.of(), List.of(),
+                List.of())));
         assertEquals("Anna B.", anna.preferences.name());
         assertEquals(Optional.of("mic"), anna.preferences.microphone());
         assertFalse(anna.preferences.cameraOnAtStart());
         assertTrue(anna.autostart.enabled());
+        assertTrue(before.keepChats() && before.chatsAvailable());
+        assertFalse(anna.preferences.keepChats());
         assertEquals(MSG.get("settings.port.restart"), anna.view.errors.getLast());
         assertTrue(anna.view.status.startsWith(MSG.format("status.reachable", "Anna B.", String.valueOf(anna.phone.port()))));
     }

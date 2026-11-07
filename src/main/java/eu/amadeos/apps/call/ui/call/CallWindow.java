@@ -330,6 +330,11 @@ public final class CallWindow extends JFrame implements CallView {
     }
 
     @Override
+    public void showHistory(List<ChatLine> earlier) {
+        chat.setHistory(earlier);
+    }
+
+    @Override
     public void showVerified(boolean verified) {
         picture.setVerified(verified);
         picture.setTexts(msg.get(verified ? "call.encrypted.verified" : "call.encrypted"), msg.get("call.remote-muted"),

@@ -10,6 +10,7 @@ import eu.amadeos.apps.call.media.Devices;
 import eu.amadeos.apps.call.media.FakeMedia;
 import eu.amadeos.apps.call.media.Sources;
 import eu.amadeos.apps.call.repository.CallLog;
+import eu.amadeos.apps.call.repository.ChatHistory;
 import eu.amadeos.apps.call.repository.CallPreferences;
 import eu.amadeos.apps.call.repository.KnownPeers;
 import eu.amadeos.apps.call.service.Autostart;
@@ -49,6 +50,7 @@ final class TestSide {
     final Phone phone;
     final KnownPeers known;
     final CallLog log;
+    final ChatHistory chats;
     final CallPreferences preferences;
     final Autostart autostart;
     final MainPresenter presenter;
@@ -72,6 +74,8 @@ final class TestSide {
         phone = new Phone(new IdentityStore(home), discovery, used, Instant::now);
         known = new KnownPeers(home.resolve("people.properties"));
         log = new CallLog(home.resolve("calls.tsv"));
+        javax.crypto.SecretKey chatKey = new javax.crypto.spec.SecretKeySpec(new byte[32], "AES");
+        chats = new ChatHistory(home.resolve("chats"), () -> java.util.Optional.of(chatKey));
         preferences = new CallPreferences(home.resolve("call.properties"), name);
         preferences.setPort(0);
         autostart = new Autostart(home.resolve("config"));
@@ -87,7 +91,7 @@ final class TestSide {
             }
         };
         presenter = new MainPresenter(window == null ? view : window, MSG, null, new MainPresenter.Services(phone,
-                used, devices, known, log, preferences, autostart, ringer, sources, background,
+                used, devices, known, log, preferences, chats, autostart, ringer, sources, background,
                 ui == null ? edt : ui, Instant::now,
                 () -> exited.set(true)));
     }
@@ -200,6 +204,11 @@ final class TestSide {
         }
 
         @Override
+        public boolean confirmClearChat(String who) {
+            return forget;
+        }
+
+        @Override
         public boolean confirmForget(String who) {
             return forget;
         }
@@ -265,6 +274,7 @@ final class TestSide {
             volatile boolean remoteMuted;
             volatile String ended;
             volatile CallKind kind;
+            volatile List<ChatLine> history = List.of();
             volatile boolean closed;
 
             @Override
@@ -309,6 +319,11 @@ final class TestSide {
             @Override
             public void showChat(ChatLine line) {
                 chat.add(line);
+            }
+
+            @Override
+            public void showHistory(List<ChatLine> earlier) {
+                history = List.copyOf(earlier);
             }
 
             @Override

@@ -20,17 +20,26 @@ import java.awt.Dimension;
 import java.awt.Font;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.format.FormatStyle;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Consumer;
 
 /** The chat beside the picture: the lines of both sides and a field to write. */
 final class ChatPanel extends JPanel {
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm");
+    private static final DateTimeFormatter DAY_AND_TIME =
+            DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT);
 
     private final JTextPane lines = new JTextPane();
     private final JTextField input = new JTextField();
     private final Messages msg;
     private final String peer;
     private int count;
+    /** Lines in the text so far, earlier and of this call. */
+    private int written;
+    private int historyLines;
+    private final List<ChatLine> current = new ArrayList<>();
 
     ChatPanel(Messages msg, String peer, Consumer<String> send) {
         super(new BorderLayout(0, 4));
@@ -64,20 +73,60 @@ final class ChatPanel extends JPanel {
     }
 
     void add(ChatLine line) {
+        current.add(line);
+        write(line, false);
+        count++;
+        lines.setCaretPosition(lines.getStyledDocument().getLength());
+    }
+
+    /** The kept chat from earlier calls, dimmed and with the date, above the lines of this call. */
+    void setHistory(List<ChatLine> earlier) {
         StyledDocument doc = lines.getStyledDocument();
-        SimpleAttributeSet head = new SimpleAttributeSet();
-        StyleConstants.setBold(head, true);
-        StyleConstants.setForeground(head, line.mine() ? AmadeUI.theme().textInactive() : lines.getForeground());
-        SimpleAttributeSet body = new SimpleAttributeSet();
         try {
-            String who = line.mine() ? msg.get("chat.me") : peer;
-            doc.insertString(doc.getLength(), (count++ == 0 ? "" : "\n") + who + "  "
-                    + TIME.format(line.at().atZone(ZoneId.systemDefault())) + "\n", head);
-            doc.insertString(doc.getLength(), line.text(), body);
+            doc.remove(0, doc.getLength());
         } catch (BadLocationException e) {
             throw new IllegalStateException(e);
         }
+        written = 0;
+        for (ChatLine line : earlier) write(line, true);
+        historyLines = earlier.size();
+        for (ChatLine line : current) write(line, false);
         lines.setCaretPosition(doc.getLength());
+    }
+
+    private void write(ChatLine line, boolean earlier) {
+        StyledDocument doc = lines.getStyledDocument();
+        SimpleAttributeSet head = new SimpleAttributeSet();
+        StyleConstants.setBold(head, true);
+        StyleConstants.setForeground(head, line.mine() || earlier ? AmadeUI.theme().textInactive() : lines.getForeground());
+        SimpleAttributeSet body = new SimpleAttributeSet();
+        if (earlier) StyleConstants.setForeground(body, AmadeUI.theme().textInactive());
+        // Like a messenger: my lines on the right, theirs on the left, with room between messages.
+        SimpleAttributeSet paragraph = new SimpleAttributeSet();
+        StyleConstants.setAlignment(paragraph, line.mine() ? StyleConstants.ALIGN_RIGHT : StyleConstants.ALIGN_LEFT);
+        float gap = 8 * AmadeUI.fontScale();
+        float side = 36 * AmadeUI.fontScale();
+        StyleConstants.setLeftIndent(paragraph, line.mine() ? side : 0);
+        StyleConstants.setRightIndent(paragraph, line.mine() ? 0 : side);
+        try {
+            String who = line.mine() ? msg.get("chat.me") : peer;
+            DateTimeFormatter when = earlier ? DAY_AND_TIME.withLocale(msg.locale()) : TIME;
+            boolean first = written++ == 0;
+            if (!first) doc.insertString(doc.getLength(), "\n", null);
+            int start = doc.getLength();
+            doc.insertString(start, who + "  " + when.format(line.at().atZone(ZoneId.systemDefault())) + "\n", head);
+            doc.insertString(doc.getLength(), line.text(), body);
+            SimpleAttributeSet top = new SimpleAttributeSet(paragraph);
+            StyleConstants.setSpaceAbove(top, first ? 0 : gap);
+            doc.setParagraphAttributes(start, 1, top, false);
+            doc.setParagraphAttributes(start + 1, doc.getLength() - start - 1, paragraph, false);
+        } catch (BadLocationException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    int historyLines() {
+        return historyLines;
     }
 
     void focusInput() {

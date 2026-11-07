@@ -14,6 +14,7 @@ import eu.amadeos.apps.call.media.MediaSettings;
 import eu.amadeos.apps.call.media.Sources;
 import eu.amadeos.apps.call.repository.CallLog;
 import eu.amadeos.apps.call.repository.CallPreferences;
+import eu.amadeos.apps.call.repository.ChatHistory;
 import eu.amadeos.apps.call.repository.KnownPeers;
 import eu.amadeos.apps.call.service.Autostart;
 import eu.amadeos.apps.call.service.Call;
@@ -65,7 +66,8 @@ public class MainPresenter {
 
     /** What the presenter works with. */
     public record Services(Phone phone, MediaFactory media, Devices devices, KnownPeers known, CallLog log,
-                           CallPreferences preferences, Autostart autostart, Ringer ringer, Sources sources,
+                           CallPreferences preferences, ChatHistory chats, Autostart autostart, Ringer ringer,
+                           Sources sources,
                            ExecutorService background, Executor ui, Supplier<Instant> clock, Runnable exit) {
     }
 
@@ -389,7 +391,16 @@ public class MainPresenter {
         selectedPerson().ifPresent(p -> {
             if (!view.confirmForget(p.name())) return;
             s.known().forget(p.key());
+            s.background().execute(() -> s.chats().delete(p.key()));
             refreshPeople();
+        });
+    }
+
+    /** Deletes the kept chat with the selected person. */
+    public void clearChatSelected() {
+        selectedPerson().ifPresent(p -> {
+            if (!view.confirmClearChat(p.name())) return;
+            s.background().execute(() -> s.chats().delete(p.key()));
         });
     }
 
@@ -399,6 +410,8 @@ public class MainPresenter {
         CallView window;
         /** Every chat line of this call, mine and theirs. */
         final List<ChatLine> lines = new ArrayList<>();
+        /** The kept chat with this person was asked for. */
+        private boolean historyAsked;
         private final AtomicReference<BufferedImage> remote = new AtomicReference<>();
         private final AtomicReference<BufferedImage> local = new AtomicReference<>();
         private final AtomicBoolean remoteQueued = new AtomicBoolean();
@@ -417,10 +430,12 @@ public class MainPresenter {
                     case CONNECTING -> {
                         s.ringer().stop();
                         window.showPhase(msg.get("phase.connecting"));
+                        showHistory(c);
                     }
                     case ACTIVE -> {
                         window.showPhase("");
                         window.showActive(s.clock().get());
+                        showHistory(c);
                     }
                     default -> {
                     }
@@ -460,6 +475,22 @@ public class MainPresenter {
             s.ui().execute(() -> {
                 lines.add(line);
                 if (window != null) window.showChat(line);
+                if (s.preferences().keepChats()) {
+                    call.peer().ifPresent(k -> s.background().execute(() -> s.chats().add(k, List.of(line))));
+                }
+            });
+        }
+
+        /** Once the other side is known: the kept chat with them, above the lines of this call. */
+        private void showHistory(Call c) {
+            if (historyAsked || window == null || !s.preferences().keepChats() || c.peer().isEmpty()) return;
+            historyAsked = true;
+            PeerKey peer = c.peer().get();
+            CallView w = window;
+            s.background().execute(() -> {
+                List<ChatLine> earlier = s.chats().load(peer);
+                if (earlier.isEmpty()) return;
+                s.ui().execute(() -> w.showHistory(earlier.stream().filter(l -> !lines.contains(l)).toList()));
             });
         }
 
@@ -570,18 +601,21 @@ public class MainPresenter {
             Future<List<Devices.Choice>> mics = ask("microphones", () -> s.devices().microphones());
             Future<List<Devices.Choice>> speakers = ask("speakers", () -> s.devices().speakers());
             Future<Boolean> echo = ask("echo", () -> s.media().missing(Sources.HEADLESS).isEmpty() && hasEcho());
+            Future<Boolean> keyring = ask("keyring", () -> s.chats().available());
             long deadline = System.nanoTime() + DEVICE_WAIT.toNanos();
             List<Devices.Choice> cameraList = answer("cameras", cameras, deadline, List.of());
             List<Devices.Choice> micList = answer("microphones", mics, deadline, List.of());
             List<Devices.Choice> speakerList = answer("speakers", speakers, deadline, List.of());
             boolean echoAvailable = answer("echo", echo, deadline, false);
+            // The keyring may ask to be unlocked; that may take longer than the devices.
+            boolean chatsAvailable = answer("keyring", keyring, deadline + KEYRING_WAIT.toNanos(), false);
             s.ui().execute(() -> {
                 try {
                     CallPreferences p = s.preferences();
                     SettingsModel model = new SettingsModel(p.name(), p.camera(), p.microphone(), p.speaker(),
                             p.cameraOnAtStart(), p.echoCancellation(), echoAvailable, p.port(),
                             s.autostart().enabled(), s.phone().self() == null ? "" : s.phone().self().hex(),
-                            cameraList, micList, speakerList);
+                            p.keepChats(), chatsAvailable, cameraList, micList, speakerList);
                     view.showSettings(model, this::applySettings);
                 } catch (RuntimeException e) {
                     LOG.error("The settings could not be opened", e);
@@ -593,6 +627,7 @@ public class MainPresenter {
 
     /** How long the settings wait for the lists of cameras, microphones and speakers. */
     static final Duration DEVICE_WAIT = Duration.ofSeconds(5);
+    static final Duration KEYRING_WAIT = Duration.ofSeconds(25);
 
     /** Runs one question on a thread of its own (GStreamer and pactl block in native code). */
     private static <T> Future<T> ask(String what, Callable<T> question) {
@@ -633,6 +668,7 @@ public class MainPresenter {
         p.setCameraOnAtStart(m.cameraOnAtStart());
         p.setEchoCancellation(m.echoCancellation());
         p.setPort(m.port());
+        p.setKeepChats(m.keepChats());
         try {
             s.autostart().set(m.waitAfterLogin());
         } catch (IOException e) {
