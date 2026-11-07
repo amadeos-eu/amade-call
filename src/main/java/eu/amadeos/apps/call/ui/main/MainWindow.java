@@ -456,6 +456,9 @@ public final class MainWindow extends JFrame implements MainView {
         text.setLineWrap(true);
         text.setWrapStyleWord(true);
         text.setColumns(42);
+        // Without a width the text area asks for one line, so the dialog cut off its buttons; with the width of
+        // its columns it asks for the height of all its wrapped lines.
+        text.setSize(text.getPreferredSize().width, Short.MAX_VALUE);
         return text;
     }
 

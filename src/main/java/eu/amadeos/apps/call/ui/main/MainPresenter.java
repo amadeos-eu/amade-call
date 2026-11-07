@@ -17,6 +17,7 @@ import eu.amadeos.apps.call.repository.CallPreferences;
 import eu.amadeos.apps.call.repository.KnownPeers;
 import eu.amadeos.apps.call.service.Autostart;
 import eu.amadeos.apps.call.service.Call;
+import eu.amadeos.apps.call.service.LocalAddress;
 import eu.amadeos.apps.call.service.NearbyPeer;
 import eu.amadeos.apps.call.service.Phone;
 import eu.amadeos.apps.call.service.Ringer;
@@ -30,6 +31,7 @@ import org.slf4j.LoggerFactory;
 
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -39,8 +41,15 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -68,6 +77,8 @@ public class MainPresenter {
     private Optional<PeerKey> selected = Optional.empty();
     private boolean discovery = true;
     private boolean started;
+    /** This computer's name and addresses in the network, for the status line. */
+    private String ownAddress = "";
     private String lastAddress = "";
     private Call call;
     private CallView callView;
@@ -91,7 +102,9 @@ public class MainPresenter {
         s.background().execute(() -> {
             try {
                 s.phone().start(s.preferences().name(), s.preferences().port(), this::mediaSettings, new PhoneEvents());
+                String address = LocalAddress.describe();
                 s.ui().execute(() -> {
+                    ownAddress = address;
                     started = true;
                     showStatus();
                 });
@@ -108,6 +121,7 @@ public class MainPresenter {
     private void showStatus() {
         if (!started) return;
         String status = msg.format("status.reachable", s.preferences().name(), String.valueOf(s.phone().port()));
+        if (!ownAddress.isEmpty()) status += " (" + ownAddress + ")";
         view.showStatus(status + "  ·  " + msg.get(discovery ? "status.network-on" : "status.network-off"));
     }
 
@@ -504,18 +518,55 @@ public class MainPresenter {
 
     public void openSettings() {
         s.background().execute(() -> {
-            List<Devices.Choice> cameras = s.sources() == Sources.DEVICES ? s.devices().cameras() : List.of();
-            List<Devices.Choice> mics = s.devices().microphones();
-            List<Devices.Choice> speakers = s.devices().speakers();
-            boolean echo = s.media().missing(Sources.HEADLESS).isEmpty() && hasEcho();
+            // Each question gets its own thread and at most a few seconds: a camera or sound system that does not
+            // answer, or fails, leaves its list empty, but the dialog opens.
+            Future<List<Devices.Choice>> cameras = s.sources() == Sources.DEVICES
+                    ? ask("cameras", () -> s.devices().cameras()) : CompletableFuture.completedFuture(List.of());
+            Future<List<Devices.Choice>> mics = ask("microphones", () -> s.devices().microphones());
+            Future<List<Devices.Choice>> speakers = ask("speakers", () -> s.devices().speakers());
+            Future<Boolean> echo = ask("echo", () -> s.media().missing(Sources.HEADLESS).isEmpty() && hasEcho());
+            long deadline = System.nanoTime() + DEVICE_WAIT.toNanos();
+            List<Devices.Choice> cameraList = answer("cameras", cameras, deadline, List.of());
+            List<Devices.Choice> micList = answer("microphones", mics, deadline, List.of());
+            List<Devices.Choice> speakerList = answer("speakers", speakers, deadline, List.of());
+            boolean echoAvailable = answer("echo", echo, deadline, false);
             s.ui().execute(() -> {
-                CallPreferences p = s.preferences();
-                SettingsModel model = new SettingsModel(p.name(), p.camera(), p.microphone(), p.speaker(),
-                        p.cameraOnAtStart(), p.echoCancellation(), echo, p.port(), s.autostart().enabled(),
-                        s.phone().self() == null ? "" : s.phone().self().hex(), cameras, mics, speakers);
-                view.showSettings(model, this::applySettings);
+                try {
+                    CallPreferences p = s.preferences();
+                    SettingsModel model = new SettingsModel(p.name(), p.camera(), p.microphone(), p.speaker(),
+                            p.cameraOnAtStart(), p.echoCancellation(), echoAvailable, p.port(),
+                            s.autostart().enabled(), s.phone().self() == null ? "" : s.phone().self().hex(),
+                            cameraList, micList, speakerList);
+                    view.showSettings(model, this::applySettings);
+                } catch (RuntimeException e) {
+                    LOG.error("The settings could not be opened", e);
+                    view.showError(msg.format("error.settings", String.valueOf(e.getMessage())));
+                }
             });
         });
+    }
+
+    /** How long the settings wait for the lists of cameras, microphones and speakers. */
+    static final Duration DEVICE_WAIT = Duration.ofSeconds(5);
+
+    /** Runs one question on a thread of its own (GStreamer and pactl block in native code). */
+    private static <T> Future<T> ask(String what, Callable<T> question) {
+        FutureTask<T> task = new FutureTask<>(question);
+        Thread.ofPlatform().daemon().name("amade-call-settings-" + what).start(task);
+        return task;
+    }
+
+    private static <T> T answer(String what, Future<T> future, long deadline, T fallback) {
+        try {
+            return future.get(Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
+        } catch (TimeoutException e) {
+            LOG.warn("No answer for the {} within {} seconds", what, DEVICE_WAIT.toSeconds());
+        } catch (ExecutionException e) {
+            LOG.warn("No list of {}", what, e.getCause());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        return fallback;
     }
 
     private static boolean hasEcho() {
