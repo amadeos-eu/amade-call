@@ -1,5 +1,6 @@
 package eu.amadeos.apps.call.repository;
 
+import eu.amadeos.apps.call.domain.ChatFile;
 import eu.amadeos.apps.call.domain.ChatLine;
 import eu.amadeos.apps.call.domain.PeerKey;
 import org.slf4j.Logger;
@@ -104,13 +105,19 @@ public class ChatHistory {
 
     // ---------------------------------------------------------------- format
 
-    /** One line per chat line: time in milliseconds, 1 for mine or 0, the text with \\, \n and \t escaped. */
+    /**
+     * One line per chat line: time in milliseconds, 1 for mine or 0, the text with \\, \n and \t escaped; for a
+     * picture or file then "F", its size and where it is.
+     */
     static byte[] encode(List<ChatLine> lines) {
         StringBuilder b = new StringBuilder();
         for (ChatLine l : lines) {
             b.append(l.at().toEpochMilli()).append('\t').append(l.mine() ? '1' : '0').append('\t')
-                    .append(l.text().replace("\\", "\\\\").replace("\n", "\\n").replace("\t", "\\t"))
-                    .append('\n');
+                    .append(escape(l.text()));
+            if (l.file() != null && l.file().path() != null) {
+                b.append("\tF\t").append(l.file().size()).append('\t').append(escape(l.file().path().toString()));
+            }
+            b.append('\n');
         }
         return b.toString().getBytes(StandardCharsets.UTF_8);
     }
@@ -118,11 +125,21 @@ public class ChatHistory {
     static List<ChatLine> decode(byte[] bytes) {
         List<ChatLine> lines = new ArrayList<>();
         for (String row : new String(bytes, StandardCharsets.UTF_8).split("\n")) {
-            String[] f = row.split("\t", 3);
+            String[] f = row.split("\t", -1);
             if (f.length < 3) continue;
-            lines.add(new ChatLine("1".equals(f[1]), unescape(f[2]), Instant.ofEpochMilli(Long.parseLong(f[0]))));
+            String text = unescape(f[2]);
+            ChatFile file = null;
+            if (f.length >= 6 && "F".equals(f[3])) {
+                file = new ChatFile("kept-" + f[0] + "-" + lines.size(), text, Long.parseLong(f[4]), Long.parseLong(f[4]),
+                        ChatFile.Status.DONE, Path.of(unescape(f[5])));
+            }
+            lines.add(new ChatLine("1".equals(f[1]), text, Instant.ofEpochMilli(Long.parseLong(f[0])), file));
         }
         return lines;
+    }
+
+    private static String escape(String s) {
+        return s.replace("\\", "\\\\").replace("\n", "\\n").replace("\t", "\\t");
     }
 
     private static String unescape(String s) {

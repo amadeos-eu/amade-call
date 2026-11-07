@@ -21,6 +21,7 @@ import eu.amadeos.apps.call.service.Phone;
 import eu.amadeos.apps.call.service.Ringer;
 import eu.amadeos.apps.call.ui.call.CallView;
 import eu.amadeos.apps.call.ui.dialogs.IncomingView;
+import eu.amadeos.commons.desktop.DesktopLauncher;
 import eu.amadeos.commons.i18n.Messages;
 
 import java.awt.image.BufferedImage;
@@ -48,6 +49,8 @@ final class TestSide {
     final FakeView view;
     final RecordingRinger ringer = new RecordingRinger();
     final AtomicBoolean exited = new AtomicBoolean();
+    /** Files the presenter opened with their program. */
+    final List<Path> opened = new CopyOnWriteArrayList<>();
     final Phone phone;
     final KnownPeers known;
     final CallLog log;
@@ -92,7 +95,13 @@ final class TestSide {
             }
         };
         presenter = new MainPresenter(window == null ? view : window, MSG, null, new MainPresenter.Services(phone,
-                used, devices, known, log, preferences, chats, new AddressBook(home.resolve("contacts")), autostart, ringer, sources, background,
+                used, devices, known, log, preferences, chats, new AddressBook(home.resolve("contacts")), home.resolve("Downloads"),
+                new DesktopLauncher() {
+                    @Override
+                    public void open(Path file) {
+                        opened.add(file);
+                    }
+                }, autostart, ringer, sources, background,
                 ui == null ? edt : ui, Instant::now,
                 () -> exited.set(true)));
     }
@@ -281,6 +290,7 @@ final class TestSide {
         static final class Window implements CallView {
             final List<String> phases = new CopyOnWriteArrayList<>();
             final List<ChatLine> chat = new CopyOnWriteArrayList<>();
+            final List<String> infos = new CopyOnWriteArrayList<>();
             final List<List<Boolean>> switches = new CopyOnWriteArrayList<>();
             volatile boolean active;
             volatile int remoteFrames;
@@ -347,6 +357,7 @@ final class TestSide {
 
             @Override
             public void showInfo(String text) {
+                infos.add(text);
             }
 
             @Override

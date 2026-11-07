@@ -31,6 +31,14 @@ public record Signal(Type type, Map<String, Object> fields) {
         /** An ICE candidate: {@code index} (m-line) and {@code candidate}. */
         ICE,
         CHAT,
+        /** A picture or file follows: {@code id}, {@code name}, {@code size} in bytes. */
+        FILE,
+        /** A piece of it: {@code id} and {@code data} in Base64, in order. */
+        FILE_DATA,
+        /** All of it was sent: {@code id} and {@code sha256} of the whole file. */
+        FILE_END,
+        /** Either side gives up the file {@code id}. */
+        FILE_CANCEL,
         /** The sender switched its camera on or off. */
         CAMERA,
         /** The sender started or stopped sharing its screen. */
@@ -88,6 +96,22 @@ public record Signal(Type type, Map<String, Object> fields) {
         return new Signal(Type.CHAT, Map.of("text", text));
     }
 
+    public static Signal file(String id, String name, long size) {
+        return new Signal(Type.FILE, Map.of("id", id, "name", name, "size", size));
+    }
+
+    public static Signal fileData(String id, String base64) {
+        return new Signal(Type.FILE_DATA, Map.of("id", id, "data", base64));
+    }
+
+    public static Signal fileEnd(String id, String sha256) {
+        return new Signal(Type.FILE_END, Map.of("id", id, "sha256", sha256));
+    }
+
+    public static Signal fileCancel(String id) {
+        return new Signal(Type.FILE_CANCEL, Map.of("id", id));
+    }
+
     public static Signal camera(boolean on) {
         return new Signal(Type.CAMERA, Map.of("on", on));
     }
@@ -112,6 +136,11 @@ public record Signal(Type type, Map<String, Object> fields) {
 
     public int number(String key) {
         return Json.integer(fields, key);
+    }
+
+    /** A whole number that may be larger than an int; -1 when missing. */
+    public long longNumber(String key) {
+        return fields.get(key) instanceof Number n ? n.longValue() : -1;
     }
 
     public boolean flag(String key) {

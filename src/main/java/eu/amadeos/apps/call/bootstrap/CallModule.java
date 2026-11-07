@@ -25,6 +25,7 @@ import eu.amadeos.apps.call.ui.main.MainWindow;
 import eu.amadeos.commons.app.Ui;
 import eu.amadeos.commons.config.XdgDirectories;
 import eu.amadeos.commons.desktop.SecretToolPasswordStore;
+import eu.amadeos.commons.desktop.DesktopLauncher;
 import eu.amadeos.commons.i18n.LocaleSettings;
 import eu.amadeos.commons.i18n.Messages;
 import eu.amadeos.commons.process.CommandRunner;
@@ -89,7 +90,8 @@ public final class CallModule extends AbstractModule {
                 new ChatKey(() -> new SecretToolPasswordStore("amade-call")));
         return new MainPresenter(window, msg, locales, new MainPresenter.Services(phone, media,
                 new Devices(CommandRunner.system()), known, log, preferences, chats,
-                new AddressBook(xdg.dataHome().resolve("amadeos").resolve("contacts")), new Autostart(xdg.configHome()),
+                new AddressBook(xdg.dataHome().resolve("amadeos").resolve("contacts")), xdg.downloads(),
+                new DesktopLauncher(), new Autostart(xdg.configHome()),
                 new Ringer(), sources, background, ui, Instant::now, () -> {
                     instance.close();
                     System.exit(0);

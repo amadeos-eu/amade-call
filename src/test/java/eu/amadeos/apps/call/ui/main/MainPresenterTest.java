@@ -19,6 +19,7 @@ import java.util.Locale;
 import java.util.Optional;
 
 import static eu.amadeos.apps.call.Wait.until;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -86,6 +87,55 @@ class MainPresenterTest {
         assertEquals("Ben", benSeen.name());
         assertEquals(ben.phone.port(), benSeen.endpoint().orElseThrow().port());
         until("Ben listed", () -> anna.view.people.stream().anyMatch(p -> p.name().equals("Ben")));
+    }
+
+    @Test
+    void picturesAndFilesGoThroughTheChat() throws Exception {
+        Calling c = annaCallsBen(CallKind.CHAT);
+        ben.on(() -> ben.presenter.accept(true));
+        until("both open", () -> c.annaWindow.active && ben.lastWindow().active);
+        java.nio.file.Path photo = dir.resolve("anna").resolve("floor plan.png");
+        java.awt.image.BufferedImage image = new java.awt.image.BufferedImage(40, 30,
+                java.awt.image.BufferedImage.TYPE_INT_RGB);
+        javax.imageio.ImageIO.write(image, "png", photo.toFile());
+        byte[] big = new byte[1_300_000];
+        new java.util.Random(7).nextBytes(big);
+        java.nio.file.Path data = java.nio.file.Files.write(dir.resolve("anna").resolve("data.dat"), big);
+        anna.on(() -> anna.presenter.sendFiles(List.of(photo, data, dir.resolve("anna").resolve("missing.txt"))));
+
+        java.nio.file.Path inbox = dir.resolve("ben").resolve("Downloads").resolve("amade-call");
+        until("both arrived", () -> java.nio.file.Files.exists(inbox.resolve("floor plan.png"))
+                && java.nio.file.Files.exists(inbox.resolve("data.dat")));
+        assertArrayEquals(big, java.nio.file.Files.readAllBytes(inbox.resolve("data.dat")));
+        assertArrayEquals(java.nio.file.Files.readAllBytes(photo),
+                java.nio.file.Files.readAllBytes(inbox.resolve("floor plan.png")));
+        until("Ben sees them done", () -> done(ben.lastWindow(), "floor plan.png") && done(ben.lastWindow(), "data.dat"));
+        until("Anna sees them done", () -> done(c.annaWindow, "floor plan.png") && done(c.annaWindow, "data.dat"));
+        assertTrue(c.annaWindow.chat.stream().anyMatch(l -> l.file() != null
+                && l.file().status() == eu.amadeos.apps.call.domain.ChatFile.Status.RUNNING), "progress shown");
+        until("the missing one is reported", () -> c.annaWindow.infos.size() == 1);
+        assertTrue(c.annaWindow.infos.getFirst().startsWith("missing.txt cannot be sent"), c.annaWindow.infos.toString());
+
+        // The same name again does not overwrite the first one.
+        anna.on(() -> anna.presenter.sendFiles(List.of(photo)));
+        until("second copy", () -> java.nio.file.Files.exists(inbox.resolve("floor plan (2).png")));
+        assertFalse(java.nio.file.Files.list(inbox).anyMatch(p -> p.toString().endsWith(".part")));
+
+        ben.on(() -> ben.presenter.openFile(inbox.resolve("data.dat")));
+        until("opened", () -> ben.opened.size() == 1);
+        assertEquals(inbox.resolve("data.dat"), ben.opened.getFirst());
+        java.nio.file.Path script = java.nio.file.Files.writeString(inbox.resolve("run.sh"), "echo hi");
+        ben.on(() -> ben.presenter.openFile(script));
+        until("folder opened", () -> ben.opened.size() == 2);
+        assertEquals(inbox, ben.opened.get(1), "a received script is not started");
+
+        ben.on(() -> ben.presenter.hangUp());
+        until("logged", () -> anna.log.all().size() == 1 && ben.log.all().size() == 1);
+    }
+
+    private static boolean done(TestSide.FakeView.Window w, String name) {
+        return w.chat.stream().anyMatch(l -> l.file() != null && l.file().name().equals(name)
+                && l.file().status() == eu.amadeos.apps.call.domain.ChatFile.Status.DONE);
     }
 
     @Test
