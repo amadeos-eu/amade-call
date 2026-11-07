@@ -1,6 +1,7 @@
 package eu.amadeos.apps.call.ui.call;
 
 import eu.amadeos.apps.call.domain.ChatLine;
+import eu.amadeos.apps.call.ui.CallGlyph;
 import eu.amadeos.commons.i18n.Messages;
 import eu.amadeos.commons.swing.AmadeUI;
 import eu.amadeos.commons.theme.DesktopTheme;
@@ -73,7 +74,7 @@ final class ChatPanel extends JPanel {
         add(title, BorderLayout.NORTH);
         add(scroll, BorderLayout.CENTER);
         input.setName("chat.input");
-        JButton button = new JButton(msg.get("chat.send"));
+        JButton button = CallGlyph.SEND.on(new JButton(), msg.get("chat.send"), null);
         button.setName("chat.send");
         Runnable go = () -> {
             String text = input.getText();

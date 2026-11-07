@@ -5,7 +5,9 @@ import eu.amadeos.apps.call.ui.main.Avatar;
 import eu.amadeos.apps.call.ui.main.LockIcon;
 import eu.amadeos.apps.call.ui.main.MainPresenter;
 import eu.amadeos.commons.i18n.Messages;
+import eu.amadeos.apps.call.ui.CallGlyph;
 import eu.amadeos.commons.i18n.Mnemonics;
+import eu.amadeos.commons.swing.ToolIcon;
 import eu.amadeos.commons.swing.AmadeUI;
 
 import javax.swing.BorderFactory;
@@ -69,6 +71,9 @@ public final class IncomingCallDialog extends JFrame implements IncomingView {
         accept.setFont(accept.getFont().deriveFont(Font.BOLD));
         button(audioOnly, msg.get("incoming.audio-only"), "incoming.audio-only", () -> presenter.accept(false));
         button(decline, msg.get("incoming.decline"), "incoming.decline", presenter::decline);
+        accept.setIcon(new ToolIcon(kind.video() ? CallGlyph.CAMERA : kind.media() ? CallGlyph.AUDIO_CALL : CallGlyph.CHAT));
+        audioOnly.setIcon(new ToolIcon(CallGlyph.AUDIO_CALL));
+        decline.setIcon(new ToolIcon(CallGlyph.HANG_UP));
         buttons.add(accept);
         if (kind.video()) buttons.add(audioOnly);
         buttons.add(decline);

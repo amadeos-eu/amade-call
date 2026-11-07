@@ -6,6 +6,7 @@ import eu.amadeos.apps.call.domain.CallRecord;
 import eu.amadeos.apps.call.domain.PeerKey;
 import eu.amadeos.apps.call.domain.Person;
 import eu.amadeos.apps.call.domain.SafetyCode;
+import eu.amadeos.apps.call.ui.CallGlyph;
 import eu.amadeos.apps.call.ui.call.CallView;
 import eu.amadeos.apps.call.ui.call.CallWindow;
 import eu.amadeos.apps.call.ui.dialogs.IncomingCallDialog;
@@ -45,6 +46,7 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.Insets;
 import java.awt.Frame;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -260,11 +262,10 @@ public final class MainWindow extends JFrame implements MainView {
         p.add(Box.createVerticalStrut(12));
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        JButton video = button("details.video", () -> presenter.callSelected(CallKind.VIDEO));
-        video.setFont(video.getFont().deriveFont(Font.BOLD));
-        JButton audio = button("details.audio", () -> presenter.callSelected(CallKind.AUDIO));
-        JButton chat = button("details.chat", () -> presenter.callSelected(CallKind.CHAT));
-        JButton verify = button("details.verify", presenter::verifySelected);
+        JButton video = button("details.video", CallGlyph.CAMERA, () -> presenter.callSelected(CallKind.VIDEO));
+        JButton audio = button("details.audio", CallGlyph.AUDIO_CALL, () -> presenter.callSelected(CallKind.AUDIO));
+        JButton chat = button("details.chat", CallGlyph.CHAT, () -> presenter.callSelected(CallKind.CHAT));
+        JButton verify = button("details.verify", CallGlyph.VERIFY, presenter::verifySelected);
         boolean callable = person.callable() && !inCall;
         video.setEnabled(callable);
         audio.setEnabled(callable);
@@ -313,8 +314,10 @@ public final class MainWindow extends JFrame implements MainView {
         return String.format("%d h %02d min", s / 3600, (s / 60) % 60);
     }
 
-    private JButton button(String key, Runnable action) {
-        JButton b = Mnemonics.apply(new JButton(), msg.get(key));
+    /** A button with only an icon; its text is the tooltip. */
+    private JButton button(String key, CallGlyph glyph, Runnable action) {
+        JButton b = glyph.on(new JButton(), msg.get(key), null);
+        b.setMargin(new Insets(4, 10, 4, 10));
         b.setName(key);
         b.addActionListener(e -> action.run());
         return b;
