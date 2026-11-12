@@ -107,8 +107,12 @@ tasks.register('deb') {
         }
 
         def launcher = new File(binDir, 'amade-call')
+        // The options all amadeOS programs share (heap, garbage collector) come first from the argument file
+        // amadeos-session installs; the options after it win over them.
         launcher.text = """#!/bin/sh
-exec /usr/bin/java --enable-native-access=ALL-UNNAMED -jar /opt/amade-call/amade-call.jar "\$@"
+OPTIONS=/etc/amadeos/java/app.options
+[ -r "\$OPTIONS" ] || OPTIONS=/dev/null
+exec /usr/bin/java "@\$OPTIONS" -Xmx384m --enable-native-access=ALL-UNNAMED -jar /opt/amade-call/amade-call.jar "\$@"
 """
         launcher.setExecutable(true, false)
 
